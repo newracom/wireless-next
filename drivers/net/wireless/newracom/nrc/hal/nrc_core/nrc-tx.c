@@ -176,8 +176,8 @@ void nrc_hif_wlan_work(struct work_struct *work)
 	}
 
 	if (NRC_WIM_QUEUE_LEN(hdev) != 0) {
-		DBG_HIF("HIF:queue0: %d, queue1: %d", NRC_FRAME_QUEUE_LEN(hdev),
-			NRC_WIM_QUEUE_LEN(hdev));
+		DBG_TX("WLAN TX: queue0=%d, queue1=%d",
+		       NRC_FRAME_QUEUE_LEN(hdev), NRC_WIM_QUEUE_LEN(hdev));
 	}
 
 	/* Check for SLEEPING state timeout to prevent infinite loops */
@@ -241,16 +241,6 @@ void nrc_hif_wlan_work(struct work_struct *work)
 					}
 				}
 			} else { // Frame
-				if (NRC_PS_IS_WAKING(hdev) &&
-				    (!skb_queue_empty(&hdev->queue[i]) ||
-				     skb_frame)) {
-					DBG_TX("Delay TX Frame until wake-up done.");
-					if (skb_frame) {
-						skb_queue_head(&hdev->queue[i],
-							       skb_frame);
-					}
-					break;
-				}
 #ifndef CONFIG_USE_TXQ
 				if (NRC_DRV_IS_ASLEEP(hdev))
 					break;
@@ -326,9 +316,9 @@ void nrc_hif_wlan_work(struct work_struct *work)
 			nrc_hif_update_loopback_debug_time(hdev, skb);
 			ret = nrc_hif_ops_xmit(skb);
 
-			if (ret < 0) {
-				/* TX slot exhausted: requeue for retry */
-				ERR_HIF("HIF: xmit failed (%d), requeue skb",
+			if (ret != HIF_TX_COMPLETE) {
+				/* TX failed (HIF_TX_FAILED etc): requeue for retry */
+				DBG_HIF("HIF: xmit failed (%d), requeue skb",
 					ret);
 				skb_queue_head(&hdev->queue[i], skb);
 				break;
@@ -375,8 +365,8 @@ void nrc_hif_mcp_work(struct work_struct *work)
 		atomic_set(&hdev->mcp_active, 1);
 	}
 
-	DBG_HIF("MCP HIF:queue0: %d, queue1: %d", NRC_MCP_FRAME_QUEUE_LEN(hdev),
-		NRC_MCP_WIM_QUEUE_LEN(hdev));
+	DBG_TX("MCP TX: queue0=%d, queue1=%d",
+	       NRC_MCP_FRAME_QUEUE_LEN(hdev), NRC_MCP_WIM_QUEUE_LEN(hdev));
 
 	/* Process MCP queues: WIM first (queue[1]), then frame (queue[0]) */
 	for (i = ARRAY_SIZE(hdev->mcp_queue) - 1; i >= 0; i--) {
@@ -428,9 +418,9 @@ void nrc_hif_mcp_work(struct work_struct *work)
 			}
 
 			ret = nrc_hif_ops_xmit(skb);
-			if (ret < 0) {
-				/* TX slot exhausted: requeue for retry */
-				ERR_HIF("MCP HIF: xmit failed (%d), requeue skb",
+			if (ret != HIF_TX_COMPLETE) {
+				/* TX failed (HIF_TX_FAILED etc): requeue for retry */
+				DBG_HIF("MCP HIF: xmit failed (%d), requeue skb",
 					ret);
 				skb_queue_head(&hdev->mcp_queue[i], skb);
 				break;
@@ -438,9 +428,7 @@ void nrc_hif_mcp_work(struct work_struct *work)
 
 			/*
 			 * Free SKB after transmission
-			 * Note: HIF_TX_QUEUED is never returned by current implementation.
-			 * spi_xmit() always returns HIF_TX_COMPLETE (0).
-			 * Therefore, SKB is always freed here after transmission.
+			 * Note: nrc_hif_ops_xmit() returns 0 (HIF_TX_COMPLETE) on success.
 			 */
 			nrc_hif_free_skb(hdev, skb);
 		}
@@ -469,10 +457,8 @@ void nrc_hif_mcp_work(struct work_struct *work)
 	}
 }
 
-void nrc_tx_flush_wq(void)
+void nrc_tx_flush_wq(struct nrc_hif_device *hdev)
 {
-	struct nrc_hif_device *hdev = nrc_hal_core_get_hdev();
-
 	if (!hdev) {
 		ERR_HIF("Invalid HIF device");
 		return;

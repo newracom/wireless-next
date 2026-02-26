@@ -123,13 +123,12 @@ int nrc_spi_trigger_event(struct nrc_spi_event_data *event)
 	spin_unlock_irqrestore(&spi_callback_mgr.lock, flags);
 
 	if (callback) {
-		DBG_HIF("Triggering SPI event type %d", event->type);
 		ret = callback(event);
 		if (ret < 0) {
-			DBG_HIF("Callback returned error: %d", ret);
+			ERR_BUS("Callback returned error: %d", ret);
 		}
 	} else {
-		DBG_HIF("No callback registered for event type %d",
+		ERR_BUS("No callback registered for event type %d",
 			event->type);
 		ret = -ENOENT;
 	}

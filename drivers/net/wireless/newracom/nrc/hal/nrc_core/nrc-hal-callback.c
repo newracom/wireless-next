@@ -115,7 +115,7 @@ nrc_hal_forward_simple_event(struct nrc_spi_event_data *backend_event,
 			     const char *debug_name)
 {
 	if (debug_name)
-		DBG_ST("Processing %s", debug_name);
+		DBG_STATE("Processing %s", debug_name);
 	hal_event->type = hal_type;
 	hal_event->data = backend_event->data;
 	hal_event->data_len = backend_event->data_len;
@@ -135,12 +135,12 @@ int nrc_hal_register_callback(enum nrc_frontend_type type,
 	unsigned long flags;
 
 	if (!callback) {
-		ERR_CB("Invalid callback function");
+		ERR_HAL("Invalid callback function");
 		return -EINVAL;
 	}
 
 	if (type >= NRC_FRONTEND_MAX) {
-		ERR_CB("Invalid frontend type %d", type);
+		ERR_HAL("Invalid frontend type %d", type);
 		return -EINVAL;
 	}
 
@@ -148,8 +148,8 @@ int nrc_hal_register_callback(enum nrc_frontend_type type,
 
 	if (hal_callback_mgr.frontends[type].registered) {
 		spin_unlock_irqrestore(&hal_callback_mgr.lock, flags);
-		ERR_CB("HAL callback for frontend type %d already registered",
-		       type);
+		ERR_HAL("HAL callback for frontend type %d already registered",
+			type);
 		return -EBUSY;
 	}
 
@@ -174,7 +174,7 @@ int nrc_hal_unregister_callback(enum nrc_frontend_type type)
 	unsigned long flags;
 
 	if (type >= NRC_FRONTEND_MAX) {
-		ERR_CB("Invalid frontend type %d", type);
+		ERR_HAL("Invalid frontend type %d", type);
 		return -EINVAL;
 	}
 
@@ -182,7 +182,8 @@ int nrc_hal_unregister_callback(enum nrc_frontend_type type)
 
 	if (!hal_callback_mgr.frontends[type].registered) {
 		spin_unlock_irqrestore(&hal_callback_mgr.lock, flags);
-		ERR_CB("No HAL callback registered for frontend type %d", type);
+		ERR_HAL("No HAL callback registered for frontend type %d",
+			type);
 		return -ENOENT;
 	}
 
@@ -211,13 +212,13 @@ int nrc_hal_trigger_event(struct nrc_hal_event_data *event)
 	int ret = 0;
 
 	if (!event) {
-		ERR_CB("Invalid HAL event data");
+		ERR_HAL("Invalid HAL event data");
 		return -EINVAL;
 	}
 
 	if (event->frontend_type >= NRC_FRONTEND_MAX) {
-		ERR_CB("Invalid frontend type %d in event",
-		       event->frontend_type);
+		ERR_HAL("Invalid frontend type %d in event",
+			event->frontend_type);
 		return -EINVAL;
 	}
 
@@ -238,8 +239,8 @@ int nrc_hal_trigger_event(struct nrc_hal_event_data *event)
 		// DBG_HIF("Triggering HAL event type %d to frontend %d", event->type, event->frontend_type);
 		ret = callback(event);
 		if (ret < 0) {
-			ERR_CB("HAL callback for frontend %d returned error: %d",
-			       event->frontend_type, ret);
+			ERR_HAL("HAL callback for frontend %d returned error: %d",
+				event->frontend_type, ret);
 		}
 	} else {
 		// DBG_HIF("No HAL callback registered for frontend type %d", event->frontend_type);
@@ -268,12 +269,12 @@ nrc_hal_spi_callback_handler(struct nrc_spi_event_data *backend_event)
 	struct nrc_hif_device *hdev = nrc_hal_core_get_hdev();
 
 	if (!backend_event) {
-		ERR_CB("Invalid SPI event data");
+		ERR_HAL("Invalid SPI event data");
 		return -EINVAL;
 	}
 
 	if (!hdev) {
-		ERR_CB("No hdev");
+		ERR_HAL("No hdev");
 		return -EINVAL;
 	}
 
@@ -302,7 +303,7 @@ nrc_hal_spi_callback_handler(struct nrc_spi_event_data *backend_event)
 		if (hdev) {
 			nrc_wim_reset_hif_tx(hdev);
 		} else {
-			ERR_CB("Invalid hdev pointer in RESET_TX event");
+			ERR_HAL("Invalid hdev pointer in RESET_TX event");
 		}
 		should_forward_to_frontend = false;
 		break;
@@ -310,7 +311,7 @@ nrc_hal_spi_callback_handler(struct nrc_spi_event_data *backend_event)
 		if (hdev) {
 			nrc_wim_reset_hif_rx(hdev);
 		} else {
-			ERR_CB("Invalid hdev pointer in RESET_RX event");
+			ERR_HAL("Invalid hdev pointer in RESET_RX event");
 		}
 		should_forward_to_frontend = false;
 		break;
@@ -369,7 +370,7 @@ nrc_hal_spi_callback_handler(struct nrc_spi_event_data *backend_event)
 		break;
 
 	default:
-		ERR_CB("Unknown Backend event type %d", backend_event->type);
+		ERR_HAL("Unknown Backend event type %d", backend_event->type);
 		return -EINVAL;
 	}
 
@@ -450,7 +451,7 @@ static bool nrc_hal_handle_wdt_expired(struct nrc_spi_event_data *backend_event,
 		return false;
 	}
 
-	WARN_CB(">>> IRQ 0x7D: WDT EXPIRED >>>");
+	WARN_HAL(">>> IRQ 0x7D: WDT EXPIRED >>>");
 
 	/*
 	 * If in PS state, need to recover HSPI first.
@@ -458,7 +459,7 @@ static bool nrc_hal_handle_wdt_expired(struct nrc_spi_event_data *backend_event,
 	 * but we handle this through frontend callback.
 	 */
 	if (NRC_DRV_IS_ASLEEP(hdev)) {
-		WARN_CB("WDT during PS - will notify frontend for recovery");
+		WARN_HAL("WDT during PS - will notify frontend for recovery");
 	}
 
 	/* Set driver state to REBOOT to indicate WDT recovery in progress */
@@ -563,7 +564,7 @@ nrc_hal_handle_request_fw_download(struct nrc_spi_event_data *backend_event,
 		return false;
 	}
 
-	DBG_PS(">>> IRQ 0xDC: FW DOWNLOAD REQUEST >>>");
+	/* SPI module already logged 0xDC IRQ reception */
 
 	/* Check if this is passive wake (SLEEP state) - just transition to WAKING */
 	if (NRC_PS_IS_ASLEEP(hdev)) {
@@ -601,7 +602,7 @@ nrc_hal_handle_fw_ready_from_ps(struct nrc_spi_event_data *backend_event,
 		return false;
 	}
 
-	DBG_PS(">>> IRQ 0xEC: FW READY FROM PS >>>");
+	/* SPI module already logged 0xEC IRQ reception */
 
 	/* HAL handles HIF-level operations */
 	if (hdev->params->fw_name == NULL) {
@@ -686,7 +687,7 @@ static bool nrc_hal_handle_rx_data(struct nrc_spi_event_data *backend_event,
 	struct nrc_hif_device *hdev;
 
 	if (!backend_event || !backend_event->data || !hal_event) {
-		ERR_CB("Invalid parameters for RX data handling");
+		ERR_HAL("Invalid parameters for RX data handling");
 		return false;
 	}
 
@@ -705,8 +706,8 @@ static bool nrc_hal_handle_rx_data(struct nrc_spi_event_data *backend_event,
 
 	WARN_ON(skb->len != hif->len + sizeof(*hif));
 	if (skb->len != hif->len + sizeof(*hif)) {
-		ERR_CB("HIF length mismatch: skb->len=%u, hif->len=%u",
-		       skb->len, hif->len);
+		ERR_HAL("HIF length mismatch: skb->len=%u, hif->len=%u",
+			skb->len, hif->len);
 		hal_event->type = NRC_HAL_EVT_RX_READY;
 		return true;
 	}
@@ -731,10 +732,10 @@ static bool nrc_hal_handle_rx_data(struct nrc_spi_event_data *backend_event,
 				ERR_HIF("MCP data checksum mismatch: flags=0x%02x, expected=0x%02x type:%d len:%d",
 					hif->flags, expected_checksum,
 					hif->type, hif->len);
+				NRC_SKB_TRACK_FREE(hdev, skb, hif->type, true,
+						   false);
 				return false;
 			}
-			// DBG_RX("HAL RX: MCP frame (subtype=%u) - routing to MCP frontend only",
-			//        hif->subtype);
 
 			/* Set frontend type to MCP */
 			hal_event->frontend_type = NRC_FRONTEND_MCP;
@@ -771,8 +772,8 @@ static bool nrc_hal_handle_rx_data(struct nrc_spi_event_data *backend_event,
 		return true;
 
 	default:
-		ERR_CB("Unknown HIF packet type %u - freeing packet",
-		       hif->type);
+		ERR_HAL("Unknown HIF packet type %u - freeing packet",
+			hif->type);
 		print_hex_dump(KERN_DEBUG, "hif type err ", DUMP_PREFIX_NONE,
 			       16, 1, skb->data, skb->len > 32 ? 32 : skb->len,
 			       false);
@@ -801,16 +802,16 @@ static bool nrc_hal_handle_wim_data(struct nrc_spi_event_data *backend_event,
 	struct wim *wim;
 
 	if (!hdev) {
-		ERR_CB("%s: No HIF device available, dropping WIM packet",
-		       __func__);
+		ERR_HAL("%s: No HIF device available, dropping WIM packet",
+			__func__);
 		/* Error drop: no hdev available, use hif type from header */
 		NRC_SKB_TRACK_FREE(NULL, skb, hif->type, true, false);
 		return false;
 	}
 
 	if (NRC_HIF_DRV_STATE(hdev) < NRC_DRV_START) {
-		ERR_CB("%s: DRV(%s) not START, dropping WIM packet", __func__,
-		       NRC_DRV_STATE_STR(hdev));
+		ERR_HAL("%s: DRV(%s) not START, dropping WIM packet", __func__,
+			NRC_DRV_STATE_STR(hdev));
 		/* Error drop: driver not ready, use hif type from header */
 		NRC_SKB_TRACK_FREE(hdev, skb, hif->type, true, false);
 		return false;
@@ -904,8 +905,8 @@ static bool nrc_hal_process_wim_request(struct sk_buff *skb, struct hif *hif,
 		consumed = true;
 		break;
 	default:
-		ERR_CB("%s: WIM request cmd 0x%x forwarding to frontend",
-		       __func__, wim->cmd);
+		ERR_HAL("%s: WIM request cmd 0x%x forwarding to frontend",
+			__func__, wim->cmd);
 		consumed = false; /* Forward unknown requests to frontend */
 		break;
 	}
@@ -1027,8 +1028,8 @@ static bool nrc_hal_process_wim_event(struct nrc_hif_device *hdev,
 		break;
 
 	default:
-		ERR_CB("%s: Unknown WIM event 0x%x, forwarding to WLAN",
-		       __func__, wim->event);
+		ERR_HAL("%s: Unknown WIM event 0x%x, forwarding to WLAN",
+			__func__, wim->event);
 		consumed = false; /* Forward unknown events to WLAN */
 		break;
 	}

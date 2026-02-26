@@ -19,8 +19,14 @@
 #include "nrc-hif.h"
 #include "nrc-ps-common.h"
 
+/* Common directory headers - Debug & Trace */
+#include "nrc-debug-common.h"
+
 /* Common directory headers - Interfaces */
 #include "nrc-hal-core-interface.h"
+
+/* Local module headers - Debug */
+#include "nrc-debug.h"
 
 /* Local module headers */
 #include "nrc-mac80211.h"
@@ -54,10 +60,10 @@ int nrc_ps_set_mode(struct nrc *nw, enum NRC_PS_MODE mode, u64 timeout,
 
 	/* Simple logging - HAL handles state/mode checking */
 	if (mode == NRC_PS_NONE) {
-		DBG_PS("ps_set_mode: Wake by %s", nrc_ps_reason_str(reason));
+		DBG_PS("Wake by %s", nrc_ps_reason_str(reason));
 	} else {
-		DBG_PS("ps_set_mode: %s (%llu ms) by %s", nrc_ps_mode_str(mode),
-		       timeout, nrc_ps_reason_str(reason));
+		DBG_PS("%s (%llu ms) by %s", nrc_ps_mode_str(mode), timeout,
+		       nrc_ps_reason_str(reason));
 	}
 
 	mutex_lock(&ps_set_mode);
@@ -99,7 +105,8 @@ int nrc_ps_set_mode(struct nrc *nw, enum NRC_PS_MODE mode, u64 timeout,
 	ret = nrc_hal_ops_ps_request_sleep(mode, timeout, wowlan, reason);
 
 	if (ret < 0) {
-		ERR_WLAN("Sleep request failed: %d", ret);
+		/* Sleep failed - resume operations */
+		ieee80211_wake_queues(hw);
 
 		/* Recovery: restart dynamic PS and beacon monitor */
 		nrc_ps_dyn_start_custom_timeout(nw, nw->beacon_timeout + 2000);
@@ -109,9 +116,6 @@ int nrc_ps_set_mode(struct nrc *nw, enum NRC_PS_MODE mode, u64 timeout,
 					  msecs_to_jiffies(nw->beacon_timeout));
 		}
 	}
-
-	/* WLAN-specific post-sleep operations */
-	ieee80211_wake_queues(hw);
 
 done:
 	mutex_unlock(&ps_set_mode);
@@ -224,11 +228,15 @@ void nrc_ps_dyn_start_custom_timeout(struct nrc *nw, int custom_timeout)
 	    nw->hw->conf.dynamic_ps_timeout <= 0)
 		return;
 
+	/* Don't start PS timer during scan - need to stay awake for PROBE_RESP */
+	if (atomic_read(&nw->scan_mode) != NRC_SCAN_MODE_IDLE)
+		return;
+
 	g_custom_timeout = custom_timeout;
 
 	if (custom_timeout >
 	    nw->params->extra_ps_timeout + nw->hw->conf.dynamic_ps_timeout) {
-		DBG_ST("custom timeout is set to %dms", custom_timeout);
+		DBG_STATE("custom timeout is set to %dms", custom_timeout);
 		timeout = custom_timeout;
 	} else {
 		timeout = nw->params->extra_ps_timeout +

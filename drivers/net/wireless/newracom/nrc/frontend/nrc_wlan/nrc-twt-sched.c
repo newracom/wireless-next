@@ -31,6 +31,9 @@
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
 
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* Local module headers */
 #include "compat.h"
 #include "nrc-mac80211-twt.h"
@@ -185,8 +188,7 @@ static struct twt_sched_entry *find_unused_twt_entry(struct nrc_twt_sched *s,
 		return NULL;
 	}
 
-	ERR_WLAN("No more unused entry, Total used: %u",
-		s->alloc_num);
+	ERR_WLAN("No more unused entry, Total used: %u", s->alloc_num);
 	return NULL;
 
 found:
@@ -497,8 +499,8 @@ int nrc_twt_sched_entry_add(struct nrc *nw, struct nrc_sta *sta,
 	flow_interval = (u64)flow->mantissa << flow->exp;
 
 	multi = div64_u64_rem(flow_interval, interval, &remain);
-	DBG_ST("sched: %llu, flow: %llu, multi: %llu", twt_sched->interval,
-	    flow_interval, multi);
+	DBG_STATE("sched: %llu, flow: %llu, multi: %llu", twt_sched->interval,
+		  flow_interval, multi);
 
 	/* set max multi shorter than bss max idle */
 	bss_max_idle = ((u64)sta->max_idle.idle_period << 10) * 1000;
@@ -592,11 +594,12 @@ struct nrc_twt_sched *nrc_twt_sched_init(struct nrc *nw, u64 sp, u32 num,
 		goto fail;
 	}
 
-	DBG_ST("Initializing TWT (Interval: %llu, Service Period: %llu, Service Number: %u Group Number: %u)\n",
-	    interval, sp, num, num_in_group);
+	DBG_STATE(
+		"Initializing TWT (Interval: %llu, Service Period: %llu, Service Number: %u Group Number: %u)\n",
+		interval, sp, num, num_in_group);
 
 	get_time_str_from_usec(interval, buf);
-	DBG_ST("TWT Interval: %s", buf);
+	DBG_STATE("TWT Interval: %s", buf);
 
 	ret = cal_twt_interval(interval, &mantissa, &exponent);
 	if (ret) {
@@ -605,11 +608,11 @@ struct nrc_twt_sched *nrc_twt_sched_init(struct nrc *nw, u64 sp, u32 num,
 			interval, sp, num, num_in_group);
 		goto fail;
 	}
-	DBG_ST("TWT Mantissa: %u, Exponent: %u", mantissa, exponent);
+	DBG_STATE("TWT Mantissa: %u, Exponent: %u", mantissa, exponent);
 
 	interval = (u64)(mantissa) << exponent;
 	get_time_str_from_usec(interval, buf);
-	DBG_ST("TWT Real Interval: %llu, %s", interval, buf);
+	DBG_STATE("TWT Real Interval: %llu, %s", interval, buf);
 
 	entries = (struct twt_sched_entry *)kzalloc(
 		sizeof(*entries) * (num / num_in_group), GFP_KERNEL);
@@ -641,8 +644,9 @@ struct nrc_twt_sched *nrc_twt_sched_init(struct nrc *nw, u64 sp, u32 num,
 		goto fail;
 	} else {
 		twt_sched->algo = algo;
-		DBG_ST("TWT Scheduling Algorithm: %s",
-		    algo == TWT_SCHED_ALGO_BALANCED ? "Balanced" : "FCFS");
+		DBG_STATE("TWT Scheduling Algorithm: %s",
+			  algo == TWT_SCHED_ALGO_BALANCED ? "Balanced" :
+							    "FCFS");
 	}
 
 	twt_sched->entries = entries;
@@ -722,7 +726,7 @@ int nrc_twt_sched_start(struct nrc *nw, struct ieee80211_vif *vif)
 		goto unlock;
 	}
 
-	DBG_ST("TWT Start");
+	DBG_STATE("TWT Start");
 
 	twt_sched->start_time = twt_sched->time =
 		ktime_to_us(ktime_get_boottime());
@@ -736,8 +740,8 @@ int nrc_twt_sched_start(struct nrc *nw, struct ieee80211_vif *vif)
 	t = get_ktime_from_interval(twt_sched->interval);
 	hrtimer_start(&twt_sched->timer, t, HRTIMER_MODE_REL);
 
-	DBG_ST("TSF:%llu, KTIME:%lld, DIFF:%llu", twt_sched->tsf,
-	    twt_sched->time, twt_sched->time - twt_sched->tsf);
+	DBG_STATE("TSF:%llu, KTIME:%lld, DIFF:%llu", twt_sched->tsf,
+		  twt_sched->time, twt_sched->time - twt_sched->tsf);
 
 	twt_sched->started = true;
 
@@ -767,7 +771,7 @@ void nrc_twt_sched_stop(struct nrc *nw, struct ieee80211_vif *vif)
 		goto unlock;
 	}
 
-	DBG_ST("TWT Stop");
+	DBG_STATE("TWT Stop");
 
 	hrtimer_cancel(&twt_sched->timer);
 	cancel_work_sync(&twt_sched->get_tsf_work);

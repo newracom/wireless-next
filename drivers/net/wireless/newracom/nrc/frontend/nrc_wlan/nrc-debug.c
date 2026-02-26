@@ -47,9 +47,9 @@
 #include "nrc-apf.h"
 #include "nrc-ps.h"
 
-/* Global debug variables - defined in WLAN module */
-unsigned long nrc_debug_mask;
-enum NRC_DEBUG_LEVEL nrc_debug_level;
+/* Global debug variables - defined as module parameters in nrc-wlan-params.c */
+extern unsigned long debug_mask;
+extern int debug_level;
 struct device *g_dev;
 
 /* Note: Common debugfs entries moved to nrc_core module:
@@ -62,13 +62,13 @@ struct device *g_dev;
 /* WLAN module-specific debug mask control */
 static int nrc_wlan_debugfs_debug_read(void *data, u64 *val)
 {
-	*val = nrc_debug_mask;
+	*val = debug_mask;
 	return 0;
 }
 
 static int nrc_wlan_debugfs_debug_write(void *data, u64 val)
 {
-	nrc_debug_mask = val;
+	debug_mask = val;
 	return 0;
 }
 
@@ -79,14 +79,14 @@ DEFINE_SIMPLE_ATTRIBUTE(nrc_wlan_debugfs_debug_fops,
 /* WLAN module-specific debug level control */
 static int nrc_wlan_debugfs_level_read(void *data, u64 *val)
 {
-	*val = nrc_debug_level;
+	*val = debug_level;
 	return 0;
 }
 
 static int nrc_wlan_debugfs_level_write(void *data, u64 val)
 {
 	if (val < NRC_DBG_LEVEL_MAX)
-		nrc_debug_level = (enum NRC_DEBUG_LEVEL)val;
+		debug_level = (enum NRC_DEBUG_LEVEL)val;
 	return 0;
 }
 

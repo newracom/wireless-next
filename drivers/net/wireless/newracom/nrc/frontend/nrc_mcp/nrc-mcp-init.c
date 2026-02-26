@@ -180,7 +180,7 @@ static int nrc_mcp_module_init(void)
 err_cleanup_netlink:
 	netlink_driver_exit();
 err_cleanup_hal:
-	nrc_hal_core_nw_cleanup(hdev);
+	nrc_hal_core_nw_cleanup(hdev, NULL);
 err_cleanup_callback:
 	nrc_mcp_callback_cleanup();
 err_free_mcp:
@@ -210,7 +210,7 @@ static void nrc_mcp_module_exit(void)
 
 	/* Cleanup HAL core resources */
 	if (hdev) {
-		nrc_hal_core_nw_cleanup(hdev);
+		nrc_hal_core_nw_cleanup(hdev, NULL);
 	}
 
 	/* Cleanup callback system */
@@ -222,13 +222,14 @@ static void nrc_mcp_module_exit(void)
 		g_mcp_dev = NULL;
 	}
 
+	/* Log cleanup before unregistering device (INFO uses device pointer) */
+	INFO("NRC MCP Module cleaned up");
+
 	/* Unregister virtual device */
 	if (g_mcp_virtual_dev) {
 		root_device_unregister(g_mcp_virtual_dev);
 		g_mcp_virtual_dev = NULL;
 	}
-
-	INFO("NRC MCP Module cleaned up");
 }
 
 /**

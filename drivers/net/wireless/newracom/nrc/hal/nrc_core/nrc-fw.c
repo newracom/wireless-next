@@ -1070,6 +1070,7 @@ int nrc_fw_start(struct nrc_hif_device *hdev)
 	} else {
 		p->twt_wake_interval = 0;
 	}
+	p->raw = hdev->params->raw;
 
 	p->auth_control_enable = hdev->params->set_auth_control[0] ? true :
 								     false;

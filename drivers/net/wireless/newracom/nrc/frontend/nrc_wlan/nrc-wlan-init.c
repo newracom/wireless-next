@@ -23,6 +23,9 @@
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
 
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* Common directory headers - Interfaces */
 #include "nrc-hal-core-interface.h"
 #include "nrc-ps-common.h"
@@ -87,7 +90,7 @@ static void nrc_wlan_module_exit(void)
 
 	nrc_wlan_hal_early_cleanup();
 
-	INFO("NRC WLAN Frontend subsystem cleaned up");
+	pr_info("nrc_wlan: NRC WLAN Frontend subsystem cleaned up\n");
 }
 
 /**

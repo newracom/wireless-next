@@ -38,9 +38,9 @@
 #include "hif.h"
 #include "nrc-ps.h"
 
-/* Global debug variables - defined in HAL module */
-unsigned long nrc_debug_mask;
-enum NRC_DEBUG_LEVEL nrc_debug_level;
+/* Global debug variables - defined as module parameters in nrc-hal-init.c */
+extern unsigned long debug_mask;
+extern int debug_level;
 struct device *g_dev;
 
 /* Debug functions now implemented as inline in common/nrc-debug.h */
@@ -87,8 +87,19 @@ static int nrc_debugfs_credit_show(struct seq_file *s, void *unused)
 	}
 
 	for (i = 0; i < CREDIT_QUEUE_MAX; i++) {
-		int available = hdev->credit.credit_max[i] -
-				(hdev->credit.front[i] - hdev->credit.rear[i]);
+		u8 room = 0;
+		int available;
+
+		/* Wrap-around handling */
+		if (hdev->credit.front[i] >= hdev->credit.rear[i]) {
+			room = hdev->credit.front[i] - hdev->credit.rear[i];
+		} else {
+			room = (255 - hdev->credit.rear[i]) + hdev->credit.front[i];
+		}
+
+		room = min_t(u8, hdev->credit.credit_max[i], room);
+		available = hdev->credit.credit_max[i] - room;
+
 		seq_printf(s,
 			   "CREDIT[%d] front=%d rear=%d credit=%d avail=%d\n",
 			   i, hdev->credit.front[i], hdev->credit.rear[i],
@@ -154,13 +165,13 @@ static const struct file_operations nrc_debugfs_slot_fops = {
 /* Common debug message mask (affects all modules) */
 static int nrc_debugfs_debug_read(void *data, u64 *val)
 {
-	*val = nrc_debug_mask;
+	*val = debug_mask;
 	return 0;
 }
 
 static int nrc_debugfs_debug_write(void *data, u64 val)
 {
-	nrc_debug_mask = val;
+	debug_mask = val;
 	return 0;
 }
 
@@ -170,7 +181,7 @@ DEFINE_SIMPLE_ATTRIBUTE(nrc_debugfs_debug_fops, nrc_debugfs_debug_read,
 /* Common debug level (affects all modules) */
 static int nrc_debugfs_debug_level_read(void *data, u64 *val)
 {
-	*val = nrc_debug_level;
+	*val = debug_level;
 	return 0;
 }
 
@@ -181,7 +192,7 @@ static int nrc_debugfs_debug_level_write(void *data, u64 val)
 			NRC_DBG_LEVEL_MAX - 1);
 		return -EINVAL;
 	}
-	nrc_debug_level = (enum NRC_DEBUG_LEVEL)val;
+	debug_level = (enum NRC_DEBUG_LEVEL)val;
 	INFO("Debug level set to %llu", val);
 	return 0;
 }
@@ -193,13 +204,13 @@ DEFINE_SIMPLE_ATTRIBUTE(nrc_debugfs_debug_level_fops,
 /* Core module-specific debug mask */
 static int nrc_core_debugfs_debug_read(void *data, u64 *val)
 {
-	*val = nrc_debug_mask;
+	*val = debug_mask;
 	return 0;
 }
 
 static int nrc_core_debugfs_debug_write(void *data, u64 val)
 {
-	nrc_debug_mask = val;
+	debug_mask = val;
 	return 0;
 }
 
@@ -304,6 +315,7 @@ static int nrc_debugfs_lb_test_write(void *data, u64 val)
 				ERR_HIF("Failed to alloc loopback skb");
 				return -ENOMEM;
 			}
+			NRC_SKB_CB_INIT(skb);
 			NRC_SKB_TRACK_ALLOC(hdev, skb, HIF_TYPE_LOOPBACK, false,
 					    false);
 

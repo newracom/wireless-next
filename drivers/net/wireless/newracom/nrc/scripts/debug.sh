@@ -82,11 +82,12 @@ declare -A DEBUG_BITS=(
     ["PS"]=0x00000080       # NRC_DBG_PS = 7 (bit 7)
     ["STATS"]=0x00000100    # NRC_DBG_STATS = 8 (bit 8)
     ["STATE"]=0x00000200    # NRC_DBG_STATE = 9 (bit 9)
-    ["FW"]=0x00000400       # NRC_DBG_FW = 10 (bit 10)
-    ["AMPDU"]=0x00000800    # NRC_DBG_AMPDU = 11 (bit 11)
-    ["CREDIT"]=0x00001000   # NRC_DBG_CREDIT = 12 (bit 12)
-    ["SLOT"]=0x00002000     # NRC_DBG_SLOT = 13 (bit 13)
-    ["BUS"]=0x00004000      # NRC_DBG_BUS = 14 (bit 14)
+    ["BD"]=0x00000400       # NRC_DBG_BD = 10 (bit 10)
+    ["FW"]=0x00000800       # NRC_DBG_FW = 11 (bit 11)
+    ["AMPDU"]=0x00001000    # NRC_DBG_AMPDU = 12 (bit 12)
+    ["CREDIT"]=0x00002000   # NRC_DBG_CREDIT = 13 (bit 13)
+    ["SLOT"]=0x00004000     # NRC_DBG_SLOT = 14 (bit 14)
+    ["BUS"]=0x00008000      # NRC_DBG_BUS = 15 (bit 15)
 )
 
 # All debug bits enabled mask
@@ -471,6 +472,7 @@ cmd_list_bits() {
             PS) description="Power save" ;;
             STATS) description="Statistics" ;;
             STATE) description="State machine" ;;
+            BD) description="Board data operations" ;;
             FW) description="Firmware state and operations" ;;
             AMPDU) description="A-MPDU aggregation monitoring" ;;
             CREDIT) description="Credit management and updates" ;;
@@ -1759,6 +1761,7 @@ cmd_help() {
     echo "    PS             - Power save"
     echo "    STATS          - Statistics"
     echo "    STATE          - State machine"
+    echo "    BD             - Board data operations"
     echo "    FW             - Firmware state and operations"
     echo "    AMPDU          - A-MPDU aggregation monitoring"
     echo "    CREDIT         - Credit management and updates"

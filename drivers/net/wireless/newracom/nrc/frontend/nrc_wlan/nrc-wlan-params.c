@@ -25,8 +25,14 @@
 #include "nrc.h"
 #include "nrc-hif.h"
 
+/* Common directory headers - Debug & Trace */
+#include "nrc-debug-common.h"
+
 /* Common directory headers - Interfaces */
 #include "nrc-vendor.h"
+
+/* Local module headers - Debug */
+#include "nrc-debug.h"
 
 /* Local module headers */
 #include "nrc-twt-sched.h"
@@ -275,6 +281,11 @@ module_param(twt_algo, byte, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(twt_algo,
 		 "TWT scheduling algorithm (only AP, 0:Balanced, 1:FCFS)");
 
+/* RAW enable (AP only) */
+bool raw = 0;
+module_param(raw, bool, S_IRUSR | S_IWUSR);
+MODULE_PARM_DESC(raw, "RAW Enable (AP only)");
+
 /* ===========================================================================
  * Test and Debug Parameters
  * =========================================================================== */
@@ -288,6 +299,16 @@ MODULE_PARM_DESC(wlantest, "wlantest");
 bool debug_level_all = false;
 module_param(debug_level_all, bool, 0600);
 MODULE_PARM_DESC(debug_level_all, "Driver debug level all");
+
+/* Debug level: 0=ERR, 1=WARN, 2=INFO, 3=DBG */
+int debug_level = DEFAULT_NRC_DBG_LEVEL;
+module_param(debug_level, int, 0600);
+MODULE_PARM_DESC(debug_level, "Debug level (0=ERR, 1=WARN, 2=INFO, 3=DBG)");
+
+/* Debug mask: bitmask for categories */
+unsigned long debug_mask = DEFAULT_NRC_DBG_MASK;
+module_param(debug_mask, ulong, 0600);
+MODULE_PARM_DESC(debug_mask, "Debug category mask (BASIC=0x1, HIF=0x2, WIM=0x4, TX=0x8, RX=0x10, MAC=0x20, CAPI=0x40, PS=0x80, STATS=0x100, STATE=0x200, BD=0x400, FW=0x800, AMPDU=0x1000, CREDIT=0x2000, SLOT=0x4000, BUS=0x8000, ALL=0xFFFFFFFF)");
 
 /* Discard deauth (test only) */
 bool discard_deauth = false;
@@ -403,6 +424,7 @@ void nrc_wlan_sync_params(struct nrc *nw)
 	params->twt_force_sleep = twt_force_sleep;
 	params->twt_num_in_group = twt_num_in_group;
 	params->twt_algo = twt_algo;
+	params->raw = raw;
 	params->ps_pretend = ps_pretend;
 	params->set_cca_threshold = set_cca_threshold;
 	params->nullfunc_enable = nullfunc_enable;

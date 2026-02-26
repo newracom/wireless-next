@@ -24,6 +24,11 @@
 /* Common debug macros and definitions */
 #include "nrc-debug-common.h"
 
+/* HAL Core-specific debug macros */
+#define INFO_HAL(fmt, ...) INFo("Hal", fmt, ##__VA_ARGS__)
+#define WARN_HAL(fmt, ...) WARn("Hal", fmt, ##__VA_ARGS__)
+#define ERR_HAL(fmt, ...) ERR("Hal", fmt, ##__VA_ARGS__)
+
 struct nrc_hif_device;
 struct nrc_debug;
 

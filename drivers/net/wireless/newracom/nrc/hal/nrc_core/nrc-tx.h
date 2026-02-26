@@ -40,7 +40,7 @@ void nrc_hif_wlan_work(struct work_struct *work);
  */
 void nrc_hif_mcp_work(struct work_struct *work);
 
-void nrc_tx_flush_wq(void);
+void nrc_tx_flush_wq(struct nrc_hif_device *hdev);
 void nrc_tx_cleanup_queues(void);
 
 #endif /* __NRC_TX_H__ */

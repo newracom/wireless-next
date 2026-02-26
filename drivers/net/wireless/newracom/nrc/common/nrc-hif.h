@@ -304,9 +304,17 @@ struct nrc_hif_device {
 #define NRC_PS_IS_WAKING(dev) \
 	(nrc_ps_get_state(&(dev)->ps) == NRC_PS_STATE_WAKING)
 
-#define NRC_WIM_RESP_LOCK(hdev, cmd) mutex_lock(&(hdev)->wim_resp[(cmd)].lock)
-#define NRC_WIM_RESP_UNLOCK(hdev, cmd) \
-	mutex_unlock(&(hdev)->wim_resp[(cmd)].lock)
+#define NRC_WIM_RESP_LOCK(hdev, cmd)                               \
+	do {                                                       \
+		if (!in_atomic())                                  \
+			mutex_lock(&(hdev)->wim_resp[(cmd)].lock); \
+	} while (0)
+
+#define NRC_WIM_RESP_UNLOCK(hdev, cmd)                               \
+	do {                                                         \
+		if (!in_atomic())                                    \
+			mutex_unlock(&(hdev)->wim_resp[(cmd)].lock); \
+	} while (0)
 
 /**
  * struct nrc_hif_rx_info - RX additional information
@@ -399,6 +407,15 @@ struct hif {
 #define HIF_TX_PASSOVER 3
 
 /* SKB Debug Macros - Runtime control via debugfs in hdev */
+
+/* Explicitly zero cb for defense-in-depth, though dev_alloc_skb()
+ * already clears it via memset(skb, 0, offsetof(sk_buff, tail)).
+ * Ensures clean state for ieee80211_tx_info in all code paths. */
+#define NRC_SKB_CB_INIT(skb)                                     \
+	do {                                                     \
+		if (skb)                                         \
+			memset((skb)->cb, 0, sizeof((skb)->cb)); \
+	} while (0)
 
 #define NRC_SKB_TRACK_ALLOC(hdev, skb, hif_type, is_rx_path, count_only)                   \
 	do {                                                                               \

@@ -44,6 +44,9 @@
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
 
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* Common directory headers - Interfaces */
 #include "nrc-hal-core-interface.h"
 #include "nrc-wim-types.h"
@@ -515,9 +518,9 @@ static int nrc_push_txq(struct nrc *nw, struct nrc_txq *ntxq)
 	credit = nrc_ac_credit(nw, ac);
 
 	if (credit == 0) {
-		DBG_TX_CREDIT(
-			"TX tasklet scheduled but no credit available (ac=%d credit=0)",
-			ac);
+		DBG(CAT(TX) | CAT(CREDIT),
+		    "TX tasklet scheduled but no credit available (ac=%d credit=0)",
+		    ac);
 		return 1;
 	}
 
@@ -1023,7 +1026,7 @@ static int nrc_mac_start(struct ieee80211_hw *hw)
 	mutex_lock(&nw->state_mtx);
 
 	if (nrc_idle_mode_get_state(nw)) {
-		DBG_ST("Wake target for mac start");
+		DBG_STATE("Wake target for mac start");
 		nrc_ps_set_mode(nw, NRC_PS_NONE, 2000, NULL,
 				NRC_PS_REASON_DRV_BSS_CONFIG);
 	}
@@ -1058,6 +1061,16 @@ static int nrc_mac_start(struct ieee80211_hw *hw)
 
 	nrc_hal_ops_wim_request(skb, 0, 0, false, NULL);
 
+	/* Start idle mode timeout as fallback (30s)
+	 * - Cancelled if scan/connection starts (existing logic)
+	 * - Skipped if mac80211 sets IDLE flag first
+	 * - Acts as backup for power saving if no activity */
+	if (hdev->params->idle_mode) {
+		DBG_PS("Idle mode timeout scheduled (30s fallback)");
+		nrc_idle_mode_set_state(nw, true);
+		schedule_delayed_work(&nw->idle_work, msecs_to_jiffies(30000));
+	}
+
 	mutex_unlock(&nw->state_mtx);
 
 	return 0;
@@ -1077,6 +1090,7 @@ void nrc_mac_stop(struct ieee80211_hw *hw)
 
 	mutex_lock(&nw->state_mtx);
 
+	/* Wake device if sleeping to ensure pending TX can be sent */
 	ret = nrc_ps_set_mode(nw, NRC_PS_NONE, 2000, NULL,
 			      NRC_PS_REASON_DRV_STA_ADD);
 
@@ -1084,7 +1098,9 @@ void nrc_mac_stop(struct ieee80211_hw *hw)
 	    atomic_read(&nw->d_deauth.delayed_deauth))
 		goto out;
 
-	/* Note: WIM_CMD_STOP and NRC_FW_CLEAR_STARTED are handled by core module
+	/* Note: mac80211 calls nrc_mac_flush() before stop to flush TX queues
+	 * HAL TX workqueue flush is handled by HAL stop (hif.c line 986)
+	 * WIM_CMD_STOP and NRC_FW_CLEAR_STARTED are handled by core module
 	 * when the last frontend exits (in nrc_hal_core_nw_cleanup) */
 
 	cancel_delayed_work_sync(&nw->idle_work);
@@ -1503,7 +1519,7 @@ static void prepare_deauth_sta(void *data, struct ieee80211_sta *sta)
 		ERR_WLAN("Fail to alloc skb");
 		return;
 	}
-	DBG_ST("(AP Recovery) Disconnect STA(%pM) by force", sta->addr);
+	DBG_STATE("(AP Recovery) Disconnect STA(%pM) by force", sta->addr);
 	ieee80211_rx_irqsafe(hw, skb);
 
 	++total_sta;
@@ -1522,7 +1538,7 @@ static void get_sta_cnt(void *data, struct ieee80211_sta *sta)
 		return;
 
 	++remain_sta;
-	DBG_ST("(AP Recovery) remaining sta_cnt:%d", remain_sta);
+	DBG_STATE("(AP Recovery) remaining sta_cnt:%d", remain_sta);
 }
 
 int nrc_mac_restart(struct nrc *nw)
@@ -1543,7 +1559,7 @@ int nrc_mac_restart(struct nrc *nw)
 				 * Then, driver always requests deauth for trying to reconnect.
 				 * Note: RX thread already resumed in earlier WDT handling
 				 */
-				DBG_ST("STA(%d) : Reconnect to AP", i);
+				DBG_STATE("STA(%d) : Reconnect to AP", i);
 				mdelay(300);
 				nrc_mac_cancel_hw_scan(nw->hw, nw->vif[i]);
 				ieee80211_connection_loss(nw->vif[i]);
@@ -1560,8 +1576,9 @@ int nrc_mac_restart(struct nrc *nw)
 				ieee80211_iterate_stations_atomic(
 					nw->hw, prepare_deauth_sta,
 					(void *)nw->vif[i]);
-				DBG_ST("AP(%d) : Now try to clear all STAs(total cnt:%d)",
-				       i, total_sta);
+				DBG_STATE(
+					"AP(%d) : Now try to clear all STAs(total cnt:%d)",
+					i, total_sta);
 				while (1) {
 					//wait for all the sta are locally deauthenticated by mac80211
 					if (!total_sta)
@@ -1573,27 +1590,31 @@ int nrc_mac_restart(struct nrc *nw)
 						(void *)nw->vif[i]);
 					cleared_sta = total_sta - remain_sta;
 					if (!remain_sta) {
-						DBG_ST("Completed! (Remaining STA cnt:%d)",
-						       remain_sta);
+						DBG_STATE(
+							"Completed! (Remaining STA cnt:%d)",
+							remain_sta);
 						remain_sta = 0;
 						break;
 					}
 					retry_cnt++;
 					if (retry_cnt > 10) {
-						DBG_ST("10 Trials but fail to clear STAs on mac80211. Reset by Force (Remaining STA cnt:%d)",
-						       remain_sta);
+						DBG_STATE(
+							"10 Trials but fail to clear STAs on mac80211. Reset by Force (Remaining STA cnt:%d)",
+							remain_sta);
 						break;
 					}
-					DBG_ST("NOT completed yet. Try again. (cleared STA:%d vs remained STA:%d, retry_cnt:%d)",
-					       cleared_sta, remain_sta,
-					       retry_cnt);
+					DBG_STATE(
+						"NOT completed yet. Try again. (cleared STA:%d vs remained STA:%d, retry_cnt:%d)",
+						cleared_sta, remain_sta,
+						retry_cnt);
 					total_sta = 0;
 					ieee80211_iterate_stations_atomic(
 						nw->hw, prepare_deauth_sta,
 						(void *)nw->vif[i]);
 				}
-				DBG_ST("All STAs are cleared.(retry_cnt:%d remaining sta cnt:%d)",
-				       retry_cnt, nrc_stats_report_count());
+				DBG_STATE(
+					"All STAs are cleared.(retry_cnt:%d remaining sta cnt:%d)",
+					retry_cnt, nrc_stats_report_count());
 				total_sta = 0;
 				mdelay(5000); //it's for STA's reconnect by CQM
 				nrc_hal_ops_tx_cleanup_queues();
@@ -1605,8 +1626,9 @@ int nrc_mac_restart(struct nrc *nw)
 				nrc_free_vif_index(nw, nw->vif[i]);
 			} else if (nw->vif[i]->type ==
 				   NL80211_IFTYPE_MESH_POINT) {
-				DBG_ST("mesh(%d) : Restart and do not repeering",
-				       i);
+				DBG_STATE(
+					"mesh(%d) : Restart and do not repeering",
+					i);
 				nrc_hal_ops_tx_cleanup_queues();
 				nrc_mac_clean_txq(nw);
 				nrc_mac_flush_txq(nw);
@@ -1944,9 +1966,22 @@ skip_channel_config:
 		nw->hdev->ps.enabled = (hw->conf.flags & IEEE80211_CONF_PS);
 		nw->hdev->ps.timeout = hw->conf.dynamic_ps_timeout;
 
-		DBG_MAC("[IEEE80211_CONF_CHANGE_PS] %s %d ms (DRV:%s)",
-			nw->hdev->ps.enabled ? "On" : "Off",
-			nw->hdev->ps.timeout, NRC_DRV_STATE_STR(hdev));
+		DBG(CAT(MAC) | CAT(PS),
+		    "CONF_CHANGE ps:%s timeout:%d drv:%s scan_mode=%d",
+		    nw->hdev->ps.enabled ? "enabled" : "disabled",
+		    nw->hdev->ps.timeout, NRC_DRV_STATE_STR(hdev),
+		    atomic_read(&nw->scan_mode));
+
+		/* CRITICAL: Don't enter PS during scan - we need to stay awake
+		 * to receive PROBE_RESP frames. Skip PS processing if scanning.
+		 */
+		if (atomic_read(&nw->scan_mode) ==
+			    NRC_SCAN_MODE_ACTIVE_SCANNING ||
+		    atomic_read(&nw->scan_mode) ==
+			    NRC_SCAN_MODE_PASSIVE_SCANNING) {
+			DBG_PS("Skip PS processing during scan");
+			goto ps_skip;
+		}
 
 		if (hdev->ps.enabled) /* busy time, increase ps time temporarily */
 			nrc_ps_dyn_start_custom_timeout(nw, 2000);
@@ -2027,7 +2062,7 @@ ps_skip:
 			nrc_idle_mode_set_state(nw, true);
 			nrc_ps_set_idle_mode(nw, "mac config");
 		} else {
-			DBG_ST("Changing to Active");
+			DBG_STATE("Changing to Active");
 			nrc_ps_set_mode(nw, NRC_PS_NONE, 2000, NULL,
 					NRC_PS_REASON_MAC_IDLE_EXIT);
 			nrc_idle_mode_set_state(nw, false);
@@ -2169,7 +2204,8 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 				nw->hdev->ps.enabled = true;
 				if (hw->conf.dynamic_ps_timeout == 0)
 					hw->conf.dynamic_ps_timeout = 3000;
-				nw->hdev->ps.timeout = hw->conf.dynamic_ps_timeout;
+				nw->hdev->ps.timeout =
+					hw->conf.dynamic_ps_timeout;
 				DBG_MAC("[BSS_CHANGED_ASSOC] NonTIM auto PS enabled, timeout=%d ms",
 					nw->hdev->ps.timeout);
 				nrc_ps_dyn_start(nw);
@@ -2446,20 +2482,22 @@ static void nrc_tx_ba_session_work(struct work_struct *work)
 	switch (ba_session->state) {
 	case IEEE80211_BA_NONE:
 	case IEEE80211_BA_CLOSE:
-		DBG_ST("%s: Setting up BA session for Tx TID %d with peer (%pM)",
-		       __func__, ba_session->tid, peer_sta->addr);
+		DBG_STATE(
+			"%s: Setting up BA session for Tx TID %d with peer (%pM)",
+			__func__, ba_session->tid, peer_sta->addr);
 		i_sta->nw->hdev->ampdu_supported = true;
 		i_sta->nw->ampdu_reject = false;
 		if ((ret = ieee80211_start_tx_ba_session(
 			     peer_sta, ba_session->tid, 0)) != 0) {
 			if (ret == -EBUSY) {
-				DBG_ST("%s: receiver does not want A-MPDU so disable BA session (TID:%d)",
-				       __func__, ba_session->tid);
+				DBG_STATE(
+					"%s: receiver does not want A-MPDU so disable BA session (TID:%d)",
+					__func__, ba_session->tid);
 				ba_session->state = IEEE80211_BA_DISABLE;
 			}
 			if (ret == -EAGAIN) {
-				DBG_ST("%s: session is not idle (TID:%d)",
-				       __func__, ba_session->tid);
+				DBG_STATE("%s: session is not idle (TID:%d)",
+					  __func__, ba_session->tid);
 				ieee80211_stop_tx_ba_session(peer_sta,
 							     ba_session->tid);
 				ba_session->state = IEEE80211_BA_NONE;
@@ -2472,8 +2510,8 @@ static void nrc_tx_ba_session_work(struct work_struct *work)
 				     ba_session->ba_req_last_jiffies) > 5000) {
 			ba_session->state = IEEE80211_BA_NONE;
 			ba_session->ba_req_last_jiffies = 0;
-			DBG_ST("%s: reset ba status(TID:%d)", __func__,
-			       ba_session->tid);
+			DBG_STATE("%s: reset ba status(TID:%d)", __func__,
+				  ba_session->tid);
 		}
 		break;
 	default:
@@ -2550,13 +2588,13 @@ static int nrc_wim_change_sta_state(struct nrc *nw, struct ieee80211_vif *vif,
 		state = WIM_STA_CMD_STATE_AUTHORIZED;
 
 		if (nw->params->ampdu_mode == NRC_AMPDU_DISABLE) {
-			DBG_ST("%s: AMPDU is disabled", __func__);
+			DBG_STATE("%s: AMPDU is disabled", __func__);
 			nw->hdev->ampdu_supported = false;
 			nw->ampdu_reject = true;
 			nw->ampdu_started = false;
 		} else {
-			DBG_ST("%s: AMPDU is ready with peer (%pM)", __func__,
-			       sta->addr);
+			DBG_STATE("%s: AMPDU is ready with peer (%pM)",
+				  __func__, sta->addr);
 			nrc_init_sta_ba_session(sta);
 #ifdef CONFIG_S1G_CHANNEL
 			sta->ht_cap.ht_supported = true;
@@ -2611,8 +2649,8 @@ static int nrc_mac_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	struct nrc *nw = (struct nrc *)hw->priv;
 	int i;
 
-	DBG_ST("%s: sta:%pM, %d->%d", __func__, sta->addr, old_state,
-	       new_state);
+	DBG_STATE("%s: sta:%pM, %d->%d", __func__, sta->addr, old_state,
+		  new_state);
 
 	i_sta->state = new_state;
 
@@ -2653,9 +2691,10 @@ static int nrc_mac_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		}
 
 	} else if (state_changed(NONE, NOTEXIST)) {
-		spin_lock_irqsave(&i_vif->preassoc_sta_lock, flags);
 		nrc_twt_sched_entry_del_all(nw, i_sta);
 		nrc_deinit_sta_ba_session(i_sta);
+
+		spin_lock_irqsave(&i_vif->preassoc_sta_lock, flags);
 		list_del_init(&i_sta->list);
 		spin_unlock_irqrestore(&i_vif->preassoc_sta_lock, flags);
 	} else if (state_changed(NONE, AUTH)) {
@@ -3026,6 +3065,8 @@ static void scan_complete(struct ieee80211_hw *hw, bool aborted)
 	ieee80211_scan_completed(hw, aborted);
 #endif
 
+	DBG_MAC("scan_complete: aborted=%d", aborted);
+
 	nrc_ps_set_idle_mode_delay(nw, "scan complete", 2000);
 }
 
@@ -3034,11 +3075,11 @@ void beacon_loss_check_work_handler(struct work_struct *work)
 	struct nrc *nw = container_of(to_delayed_work(work), struct nrc,
 				      beacon_loss_work);
 
-	DBG_ST("check delayed beacon loss");
+	DBG_STATE("check delayed beacon loss");
 
 	if (nw->is_bcn_timeout &&
 	    atomic_read(&nw->scan_mode) == NRC_SCAN_MODE_IDLE) {
-		DBG_ST("So far, no beacons have been received.");
+		DBG_STATE("So far, no beacons have been received.");
 		nrc_send_beacon_loss(nw);
 		nw->is_bcn_timeout = false;
 	}
@@ -3049,7 +3090,9 @@ void nrc_mac_scan_completed_work_handler(struct work_struct *work)
 	struct wim_event_work *w =
 		container_of(work, struct wim_event_work, work);
 	struct nrc *nw = w->nw;
+#ifdef CONFIG_USE_SCAN_TIMEOUT
 	struct ieee80211_vif *vif = w->vif;
+#endif
 
 	//int delay_ms = 220;
 	int delay_ms = nw->beacon_int * 3;
@@ -3063,9 +3106,42 @@ void nrc_mac_scan_completed_work_handler(struct work_struct *work)
 		}
 	}
 
+	mutex_lock(&nw->state_mtx);
 	DBG_MAC("scan results notify.");
 
-	nrc_cancel_hw_scan(nw->hw, vif);
+	/* Check if scan is still active */
+	if (atomic_read(&nw->scan_mode) != NRC_SCAN_MODE_ACTIVE_SCANNING &&
+	    atomic_read(&nw->scan_mode) != NRC_SCAN_MODE_PASSIVE_SCANNING) {
+		DBG_MAC("Scan already cancelled");
+		mutex_unlock(&nw->state_mtx);
+		kfree(w);
+		return;
+	}
+
+#ifdef CONFIG_USE_SCAN_TIMEOUT
+	{
+		struct nrc_vif *i_vif = to_i_vif(vif);
+		cancel_delayed_work_sync(&i_vif->scan_timeout);
+	}
+#endif
+
+	mutex_unlock(&nw->state_mtx);
+
+	/* CRITICAL: Keep scan_mode ACTIVE during RX queue processing.
+	 * ieee80211_rx_irqsafe() is asynchronous - frames queued for later.
+	 * If scan_mode changed to IDLE before frames processed, mac80211
+	 * may reject PROBE_RESP as "not in scan mode" and BSS list will be empty.
+	 * Delay BEFORE scan_complete() and mode change.
+	 */
+	DBG_MAC("Waiting 100ms for RX queue processing (scan_mode still ACTIVE)");
+	msleep(100);
+
+	scan_complete(nw->hw, false);
+
+	/* Now it's safe to change scan mode to IDLE */
+	mutex_lock(&nw->state_mtx);
+	change_scan_mode(nw, NRC_SCAN_MODE_IDLE);
+	mutex_unlock(&nw->state_mtx);
 
 	if (nw->associated_vif) {
 		if (!nw->params->disable_cqm) {
@@ -3088,7 +3164,7 @@ void nrc_mac_scan_completed_work_handler(struct work_struct *work)
 	kfree(w);
 }
 
-void nrc_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
+bool nrc_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 {
 	struct nrc *nw = hw->priv;
 	struct sk_buff *skb;
@@ -3102,8 +3178,8 @@ void nrc_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	if (atomic_read(&nw->scan_mode) != NRC_SCAN_MODE_ACTIVE_SCANNING &&
 	    atomic_read(&nw->scan_mode) != NRC_SCAN_MODE_PASSIVE_SCANNING) {
 		/* after disconnected by wpa_cli disconnect, received WIM_EVENT_SCAN_COMPLETED from TFW */
-		DBG_ST("Already cancelled, return");
-		return;
+		DBG_STATE("Already cancelled, return");
+		return false;
 	}
 
 	skb = nrc_hal_ops_wim_alloc_skb_vif(vif, WIM_CMD_SCAN_STOP, 0);
@@ -3111,7 +3187,7 @@ void nrc_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 
 	change_scan_mode(nw, NRC_SCAN_MODE_IDLE);
 
-	scan_complete(hw, false);
+	return true;
 }
 
 void nrc_mac_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
@@ -3119,9 +3195,11 @@ void nrc_mac_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	struct nrc *nw = hw->priv;
 	struct nrc_hif_device *hdev = nw->hdev;
 	int ret;
+	bool do_complete = false;
 
-	DBG_ST("hw scan cancel");
-	DBG_MAC("hw scan cancel2");
+	DBG_MAC("SCAN CANCEL called");
+
+	mutex_lock(&nw->state_mtx);
 
 	if (atomic_read(&nw->scan_mode) == NRC_SCAN_MODE_IDLE)
 		goto out;
@@ -3130,7 +3208,7 @@ void nrc_mac_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 		goto skip_wake;
 
 	if (NRC_DRV_IS_ASLEEP(hdev)) {
-		DBG_ST("Wake target for cancelling scan");
+		DBG_STATE("Wake target for cancelling scan");
 		ret = nrc_ps_set_mode(nw, NRC_PS_NONE, 2000, NULL,
 				      NRC_PS_REASON_DRV_SCAN_ABORT);
 		if (ret == -1) {
@@ -3139,10 +3217,13 @@ void nrc_mac_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	}
 
 skip_wake:
-	nrc_cancel_hw_scan(hw, vif);
+	do_complete = nrc_cancel_hw_scan(hw, vif);
 
 out:
-	DBG_MAC("hw scan cancel exit");
+	mutex_unlock(&nw->state_mtx);
+
+	if (do_complete)
+		scan_complete(hw, false);
 }
 
 #ifdef NRC_BUILD_USE_HWSCAN
@@ -3249,7 +3330,7 @@ static int nrc_mac_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 {
 	struct nrc *nw = hw->priv;
 
-	DBG_ST("hw scan start");
+	DBG_SE("hw scan start");
 
 	return __nrc_mac_hw_scan(hw, vif, req, NULL);
 }
@@ -3971,14 +4052,14 @@ static void nrc_mac_channel_switch_beacon(struct ieee80211_hw *hw,
 		       b->data, b->len, false);
 
 	nrc_vendor_update_beacon(hw, vif);
-	DBG_ST("[nrc_mac_channel_switch_beacon] Update Beacon for CSA");
+	DBG_STATE("[nrc_mac_channel_switch_beacon] Update Beacon for CSA");
 }
 
 static int nrc_pre_channel_switch(struct ieee80211_hw *hw,
 				  struct ieee80211_vif *vif,
 				  struct ieee80211_channel_switch *ch_switch)
 {
-	DBG_ST("[%s, %d] Channel switch start", __func__, __LINE__);
+	DBG_STATE("[%s, %d] Channel switch start", __func__, __LINE__);
 	return 0;
 }
 
@@ -3991,7 +4072,7 @@ static int nrc_post_channel_switch(struct ieee80211_hw *hw,
 				   struct ieee80211_vif *vif)
 #endif
 {
-	DBG_ST("[%s, %d] Channel switch complete", __func__, __LINE__);
+	DBG_STATE("[%s, %d] Channel switch complete", __func__, __LINE__);
 	return 0;
 }
 
@@ -3999,8 +4080,8 @@ static void nrc_channel_switch(struct ieee80211_hw *hw,
 			       struct ieee80211_vif *vif,
 			       struct ieee80211_channel_switch *ch_switch)
 {
-	DBG_ST("[%s, %d] waiting for count less than 1 ... (CH to %d)",
-	       __func__, __LINE__, ch_switch->chandef.chan->center_freq);
+	DBG_STATE("[%s, %d] waiting for count less than 1 ... (CH to %d)",
+		  __func__, __LINE__, ch_switch->chandef.chan->center_freq);
 	// ieee80211_chswitch_done(vif, true);
 }
 
@@ -4030,7 +4111,7 @@ static int nrc_mac_resume(struct ieee80211_hw *hw)
 	struct nrc *nw = hw->priv;
 	struct sk_buff *skb;
 
-	DBG_ST("[%s, L%d]", __func__, __LINE__);
+	DBG_STATE("[%s, L%d]", __func__, __LINE__);
 
 	/* Restore country code after wakeup (for IDLE_MODE) */
 	if (nw->alpha2[0] && nw->alpha2[1] &&
@@ -4045,12 +4126,12 @@ static int nrc_mac_resume(struct ieee80211_hw *hw)
 						    sizeof(u16), nw->alpha2);
 #endif
 			nrc_hal_ops_wim_request(skb, 0, 0, false, NULL);
-			DBG_ST("[%s] Restored country code: %c%c", __func__,
-			       nw->alpha2[0], nw->alpha2[1]);
+			DBG_STATE("[%s] Restored country code: %c%c", __func__,
+				  nw->alpha2[0], nw->alpha2[1]);
 		}
 	}
 
-	DBG_ST("[%s, L%d] Resume complete", __func__, __LINE__);
+	DBG_STATE("[%s, L%d] Resume complete", __func__, __LINE__);
 
 	return 0;
 }
@@ -4061,21 +4142,21 @@ static int nrc_mac_suspend(struct ieee80211_hw *hw,
 	struct nrc *nw = hw->priv;
 	int ret = 0;
 
-	DBG_ST("[%s,L%d] any:%d patterns(%p) n_patterns(%d)\n", __func__,
-	       __LINE__, wowlan->any, wowlan->patterns, wowlan->n_patterns);
+	DBG_STATE("[%s,L%d] any:%d patterns(%p) n_patterns(%d)\n", __func__,
+		  __LINE__, wowlan->any, wowlan->patterns, wowlan->n_patterns);
 
 	mutex_lock(&nw->state_mtx);
 
 	if (!NRC_PS_IS_ASLEEP(nw->hdev)) {
-		DBG_ST("No sleep state");
+		DBG_STATE("No sleep state");
 		ret = -EAGAIN;
 		goto out;
 	}
 
 out:
 	mutex_unlock(&nw->state_mtx);
-	DBG_ST("[%s, L%d] Suspend complete (ret:%d)\n", __func__, __LINE__,
-	       ret);
+	DBG_STATE("[%s, L%d] Suspend complete (ret:%d)\n", __func__, __LINE__,
+		  ret);
 	return ret;
 }
 #endif
@@ -4169,7 +4250,7 @@ static int nrc_mac_sched_scan_start(struct ieee80211_hw *hw,
 
 	mutex_lock(&nw->state_mtx);
 
-	DBG_ST("Sched scan start");
+	DBG_STATE("Sched scan start");
 
 	DBG_MAC("delay: %u", cpu_to_le32(req->delay));
 	DBG_MAC("min_rssi_thod: %d", cpu_to_le32(req->min_rssi_thold));
@@ -4230,7 +4311,7 @@ static int nrc_mac_sched_scan_start(struct ieee80211_hw *hw,
 
 	if (NRC_DRV_IS_ASLEEP(nw->hdev)) {
 		//  already idle after scan complete, transitioning to deep sleep, but the drv_state has not yet changed to NRC_DRV_PS by spi_suspend.
-		DBG_ST("Wake target for sched scan");
+		DBG_STATE("Wake target for sched scan");
 		ret = nrc_ps_set_mode(nw, NRC_PS_NONE, 2000, NULL,
 				      NRC_PS_REASON_DRV_SCAN_START);
 		if (ret == -1) {
@@ -4271,7 +4352,7 @@ static int nrc_mac_sched_scan_stop(struct ieee80211_hw *hw,
 
 	mutex_lock(&nw->state_mtx);
 
-	DBG_ST("Sched scan stop");
+	DBG_STATE("Sched scan stop");
 
 	ret = nrc_ps_set_mode(nw, NRC_PS_NONE, 2000, NULL,
 			      NRC_PS_REASON_DRV_SCAN_ABORT);
@@ -4336,6 +4417,12 @@ const char *nrc_mac_get_scan_status_str(struct nrc *nw)
 {
 	return nrc_mac_scan_status_str(atomic_read(&nw->scan_mode));
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 9, 0)
+#define HAS_CHANCTX_EMULATORS 1
+#else
+#define HAS_CHANCTX_EMULATORS 0
+#endif
 
 static const struct ieee80211_ops nrc_mac80211_ops = {
 	.tx = nrc_mac_tx,
@@ -4405,6 +4492,13 @@ static const struct ieee80211_ops nrc_mac80211_ops = {
 	.assign_vif_chanctx = nrc_mac_assign_vif_chanctx,
 	.unassign_vif_chanctx = nrc_mac_unassign_vif_chanctx,
 	.switch_vif_chanctx = nrc_mac_switch_vif_chanctx,
+#else
+#if HAS_CHANCTX_EMULATORS
+	.add_chanctx = ieee80211_emulate_add_chanctx,
+	.remove_chanctx = ieee80211_emulate_remove_chanctx,
+	.change_chanctx = ieee80211_emulate_change_chanctx,
+	.switch_vif_chanctx = ieee80211_emulate_switch_vif_chanctx,
+#endif
 #endif
 	.channel_switch_beacon = nrc_mac_channel_switch_beacon,
 	.pre_channel_switch = nrc_pre_channel_switch,
@@ -4426,7 +4520,6 @@ int nrc_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 	struct nrc_hif_device *hdev = nw->hdev;
 	struct sk_buff *skb;
 #if defined(CONFIG_SUPPORT_BD)
-	int i;
 	struct wim_bd_param *bd_param = NULL;
 #endif /* CONFIG_SUPPORT_BD */
 #ifdef CONFIG_S1G_CHANNEL
@@ -4464,23 +4557,20 @@ int nrc_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 	 */
 	bd_param = nrc_hal_ops_bd_get_tx_pwr(nrc_cc);
 	if (bd_param) {
+		int num_entries = (bd_param->length - 4) / 12;
 		DBG_FW("type %04X length %04X checksum %04X target_ver %04X",
 		       bd_param->type, bd_param->length, bd_param->checksum,
 		       bd_param->hw_version);
-		for (i = 0; i < bd_param->length - 4;) {
-			DBG_FW("%02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d",
-			       (bd_param->value[i]), (bd_param->value[i + 1]),
-			       (bd_param->value[i + 2]),
-			       (bd_param->value[i + 3]),
-			       (bd_param->value[i + 4]),
-			       (bd_param->value[i + 5]),
-			       (bd_param->value[i + 6]),
-			       (bd_param->value[i + 7]),
-			       (bd_param->value[i + 8]),
-			       (bd_param->value[i + 9]),
-			       (bd_param->value[i + 10]),
-			       (bd_param->value[i + 11]));
-			i += 12;
+		/* Print first entry as sample and total count */
+		if (num_entries > 0) {
+			DBG_FW("Fw %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d (Total %d entries)",
+			       (bd_param->value[0]), (bd_param->value[1]),
+			       (bd_param->value[2]), (bd_param->value[3]),
+			       (bd_param->value[4]), (bd_param->value[5]),
+			       (bd_param->value[6]), (bd_param->value[7]),
+			       (bd_param->value[8]), (bd_param->value[9]),
+			       (bd_param->value[10]), (bd_param->value[11]),
+			       num_entries);
 		}
 	} else {
 		/* Default policy is that if board data is invalid, block loading of FW */
@@ -5906,7 +5996,7 @@ int nrc_register_hw(struct nrc *nw, struct nrc_hif_device *hdev)
 	nw->frag_threshold = -1;
 
 	if (nw->params->enable_sched_scan) {
-		DBG_ST("Sched scan is enabled");
+		DBG_STATE("Sched scan is enabled");
 
 		hw->wiphy->max_sched_scan_ie_len = WIM_MAX_TLV_SCAN_IE;
 		hw->wiphy->max_sched_scan_ssids = WIM_MAX_SCAN_SSID;
@@ -5931,14 +6021,14 @@ int nrc_register_hw(struct nrc *nw, struct nrc_hif_device *hdev)
 		return ret;
 	}
 
-	DBG_ST("registered network device %s", wiphy_name(hw->wiphy));
+	DBG_STATE("registered network device %s", wiphy_name(hw->wiphy));
 
 	return 0;
 }
 
 void nrc_unregister_hw(struct nrc *nw)
 {
-	DBG_ST("unregistered network device %s", wiphy_name(nw->hw->wiphy));
+	DBG_STATE("unregistered network device %s", wiphy_name(nw->hw->wiphy));
 
 	/* Stop WLAN RX processing - prevent new frames from being queued */
 	atomic_set(&nw->hw_unregistering, 1);
@@ -5994,6 +6084,9 @@ struct ieee80211_hw *nrc_mac_alloc_hw(size_t priv_data_len,
 
 void nrc_mac_free_hw(struct ieee80211_hw *hw)
 {
+	/* Ensure all RCU callbacks and pending ACK frames are completed
+	 * before freeing hardware to avoid "Have pending ack frames!" warning */
+	synchronize_net();
 	ieee80211_free_hw(hw);
 }
 
@@ -6009,7 +6102,7 @@ void nrc_send_beacon_loss(struct nrc *nw)
 	}
 	i_vif = to_i_vif(nw->associated_vif);
 
-	DBG_ST("beacon loss event to vif(%d)", i_vif->index);
+	DBG_STATE("beacon loss event to vif(%d)", i_vif->index);
 	ieee80211_beacon_loss(nw->associated_vif);
 done:
 	spin_unlock_bh(&nw->vif_lock);
@@ -6048,10 +6141,6 @@ char *nrc_idle_mode_get_state_str(struct nrc *nw)
 
 bool nrc_idle_mode_get_state(struct nrc *nw)
 {
-	DBG_PS("%s: idle_mode = %d, nw->idle_state = %d, nw->associated_vif = %p, nw->scan_mode = %d",
-	       __FUNCTION__, nw->hdev->params->idle_mode, nw->idle_state,
-	       nw->associated_vif, atomic_read(&nw->scan_mode));
-
 	return nw->hdev->params->idle_mode && nw->idle_state &&
 	       (nw->associated_vif == NULL) &&
 	       (atomic_read(&nw->scan_mode) != NRC_SCAN_MODE_ACTIVE_SCANNING);
@@ -6059,7 +6148,7 @@ bool nrc_idle_mode_get_state(struct nrc *nw)
 
 void nrc_idle_mode_set_state(struct nrc *nw, bool enable)
 {
-	DBG_ST("%s: enable = %d", __FUNCTION__, enable);
+	DBG_STATE("%s: enable = %d", __FUNCTION__, enable);
 	nw->idle_state = enable;
 }
 

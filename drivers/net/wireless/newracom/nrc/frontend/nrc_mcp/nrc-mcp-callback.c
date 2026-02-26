@@ -34,6 +34,9 @@
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
 
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* Common directory headers - Interfaces */
 #include "nrc-hal-core-callback.h"
 #include "nrc-hal-core-interface.h"

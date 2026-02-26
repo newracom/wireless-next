@@ -65,7 +65,7 @@ void nrc_init_credit_queue(struct nrc_hif_device *hdev)
 	u16 chip_id;
 
 	if (!hdev) {
-		ERR_INIT("Invalid hdev pointer");
+		ERR_HIF("Invalid hdev pointer");
 		return;
 	}
 
@@ -83,7 +83,7 @@ void nrc_init_credit_queue(struct nrc_hif_device *hdev)
 	if (hdev && hdev->chip_id != 0) {
 		chip_id = hdev->chip_id;
 	} else {
-		ERR_INIT("%s: Warning - chip ID not available", __func__);
+		ERR_HIF("%s: Warning - chip ID not available", __func__);
 		return;
 	}
 
@@ -119,7 +119,7 @@ void nrc_init_credit_queue(struct nrc_hif_device *hdev)
 		break;
 
 	default:
-		ERR_INIT("Unknown chip ID 0x%04x, using default credit values",
+		ERR_HIF("Unknown chip ID 0x%04x, using default credit values",
 			 chip_id);
 		break;
 	}
@@ -155,7 +155,7 @@ int nrc_nw_start(bool restart)
 	enum NRC_DRV_STATE current_state;
 
 	if (!hdev) {
-		ERR_INIT("Invalid HIF device or ops");
+		ERR_HIF("Invalid HIF device or ops");
 		return -EINVAL;
 	}
 
@@ -175,7 +175,7 @@ int nrc_nw_start(bool restart)
 
 			return 0; /* Success - firmware already loaded */
 		} else {
-			ERR_INIT("Invalid HIF state for nw_start: %s (%d)",
+			ERR_HIF("Invalid HIF state for nw_start: %s (%d)",
 				 nrc_drv_state_str(current_state),
 				 current_state);
 			return -EINVAL;
@@ -199,7 +199,7 @@ int nrc_nw_start(bool restart)
 
 	/* Check if HW is in bootloader mode (ready for FW download) */
 	if (hdev->params->fw_name && !nrc_hif_ops_fw_is_boot()) {
-		ERR_INIT("Target not in bootloader mode");
+		ERR_HIF("Target not in bootloader mode");
 		return -EINVAL;
 	}
 
@@ -207,7 +207,7 @@ int nrc_nw_start(bool restart)
 #if defined(CONFIG_SUPPORT_BD)
 	ret = nrc_check_bd(hdev);
 	if (ret) {
-		ERR_INIT("Failed to nrc_check_bd");
+		ERR_HIF("Failed to nrc_check_bd");
 		return -EINVAL;
 	}
 #endif
@@ -227,14 +227,14 @@ skip_fw_download:
 	NRC_HIF_SET_DRV_STATE(hdev, NRC_DRV_START);
 	ret = nrc_hal_start();
 	if (ret) {
-		ERR_INIT("Failed to start HAL device, err %d", ret);
+		ERR_HIF("Failed to start HAL device, err %d", ret);
 		goto err_return;
 	}
 
 	// 5th Phase: FW Start
 	ret = nrc_fw_start(hdev);
 	if (ret) {
-		ERR_INIT("Failed to nrc_fw_start");
+		ERR_HIF("Failed to nrc_fw_start");
 		goto err_return;
 	}
 
@@ -244,7 +244,7 @@ skip_fw_download:
 err_return:
 	/* Cleanup on error */
 	hdev->fw.loaded = false;
-	nrc_hal_stop();
+	nrc_hal_stop(hdev);
 	nrc_hif_ops_reset_device();
 	NRC_HIF_SET_DRV_STATE(hdev, NRC_DRV_INIT);
 	return ret;
@@ -255,19 +255,19 @@ int nrc_nw_start_fusing(void)
 	int ret;
 	struct nrc_hif_device *hdev = nrc_hal_core_get_hdev();
 	if (!hdev) {
-		ERR_INIT("Invalid HIF device or ops");
+		ERR_HIF("Invalid HIF device or ops");
 		return -EINVAL;
 	}
 
 	INFO("NRC start fusing flash");
 
 	if (!NRC_DRV_IS_INIT(hdev)) {
-		ERR_INIT("Invalid DRV state (%s)", NRC_DRV_STATE_STR(hdev));
+		ERR_HIF("Invalid DRV state (%s)", NRC_DRV_STATE_STR(hdev));
 		return -EINVAL;
 	}
 
 	if (hdev->params->dl_name && !nrc_hif_ops_fw_is_boot()) {
-		ERR_INIT("Target not in bootloader mode");
+		ERR_HIF("Target not in bootloader mode");
 		return -EINVAL;
 	}
 
@@ -312,7 +312,7 @@ int nrc_nw_stop(bool restart)
 #endif
 
 	if (!hdev) {
-		ERR_INIT("Invalid HIF device or ops");
+		ERR_HIF("Invalid HIF device or ops");
 		return -EINVAL;
 	}
 
@@ -350,7 +350,7 @@ int nrc_nw_stop(bool restart)
 	nrc_hal_trigger_event(&event);
 #endif
 
-	nrc_hal_stop();
+	nrc_hal_stop(hdev);
 	nrc_tx_cleanup_queues();
 
 	nrc_hif_ops_reset_device();
@@ -373,7 +373,7 @@ void nrc_nw_restart(void)
 {
 	struct nrc_hif_device *hdev = nrc_hal_core_get_hdev();
 	if (!hdev) {
-		ERR_INIT("Invalid HIF device or ops");
+		ERR_HIF("Invalid HIF device or ops");
 		return;
 	}
 
@@ -401,7 +401,7 @@ int nrc_hal_fw_init(struct nrc_hif_device *hdev)
 
 	hdev->fw.priv = nrc_fw_alloc();
 	if (!hdev->fw.priv) {
-		ERR_INIT("Failed to allocate FW private structure");
+		ERR_HIF("Failed to allocate FW private structure");
 		return -ENOMEM;
 	}
 
@@ -470,7 +470,7 @@ struct nrc_params *nrc_params_alloc(void)
 
 	params = kzalloc(sizeof(struct nrc_params), GFP_KERNEL);
 	if (!params) {
-		ERR_INIT("Failed to allocate nrc_params structure");
+		ERR_HIF("Failed to allocate nrc_params structure");
 		return NULL;
 	}
 
@@ -535,7 +535,7 @@ struct nrc_debug *nrc_debug_alloc(void)
 
 	debug = kzalloc(sizeof(struct nrc_debug), GFP_KERNEL);
 	if (!debug) {
-		ERR_INIT("Failed to allocate nrc_debug structure");
+		ERR_HIF("Failed to allocate nrc_debug structure");
 		return NULL;
 	}
 

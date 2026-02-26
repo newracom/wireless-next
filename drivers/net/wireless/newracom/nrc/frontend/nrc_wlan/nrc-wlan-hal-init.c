@@ -29,6 +29,9 @@
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
 
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* Common directory headers - Interfaces */
 #include "nrc-hal-core-interface.h"
 
@@ -109,6 +112,7 @@ int nrc_wlan_hal_early_init(void)
 	ret = nrc_hal_core_nw_init(g_nw, hdev);
 	if (ret) {
 		ERR_WLAN("HAL initialization failed: %d", ret);
+		nrc_hal_core_nw_cleanup(hdev, g_nw);
 		nrc_wlan_nw_deinit(g_nw);
 		nrc_mac_free_hw(g_hw);
 		g_nw = NULL;
@@ -128,9 +132,9 @@ void nrc_wlan_hal_early_cleanup(void)
 
 	/* Cleanup in reverse order: HAL first, then WLAN */
 	if (g_nw) {
-		/* HAL cleanup with hdev parameter */
+		/* HAL cleanup with hdev and nw parameters */
 		if (g_nw->hdev) {
-			nrc_hal_core_nw_cleanup(g_nw->hdev);
+			nrc_hal_core_nw_cleanup(g_nw->hdev, g_nw);
 		}
 
 		/* Cleanup WLAN-specific components */
@@ -205,7 +209,7 @@ int nrc_wlan_nw_init(struct nrc *nw)
 		return -EINVAL;
 	}
 
-	// DBG_ST("WLAN: Starting WLAN-specific initialization");
+	// DBG_STATE("WLAN: Starting WLAN-specific initialization");
 
 	/* Synchronize WLAN module parameters with nw structure */
 	nrc_wlan_sync_params(nw);
@@ -237,33 +241,37 @@ void nrc_wlan_nw_deinit(struct nrc *nw)
 		return;
 	}
 
-	// DBG_ST("WLAN: Starting WLAN-specific cleanup");
+	// DBG_STATE("WLAN: Starting WLAN-specific cleanup");
 
 	/* Free vendor SKBs */
 	if (nw->vendor_skb_beacon) {
-		NRC_SKB_TRACK_FREE(nw->hdev, nw->vendor_skb_beacon, HIF_TYPE_FRAME, false, false);
+		NRC_SKB_TRACK_FREE(nw->hdev, nw->vendor_skb_beacon,
+				   HIF_TYPE_FRAME, false, false);
 		nw->vendor_skb_beacon = NULL;
 	}
 
 	if (nw->vendor_skb_probe_req) {
-		NRC_SKB_TRACK_FREE(nw->hdev, nw->vendor_skb_probe_req, HIF_TYPE_FRAME, false, false);
+		NRC_SKB_TRACK_FREE(nw->hdev, nw->vendor_skb_probe_req,
+				   HIF_TYPE_FRAME, false, false);
 		nw->vendor_skb_probe_req = NULL;
 	}
 
 	if (nw->vendor_skb_probe_rsp) {
-		NRC_SKB_TRACK_FREE(nw->hdev, nw->vendor_skb_probe_rsp, HIF_TYPE_FRAME, false, false);
+		NRC_SKB_TRACK_FREE(nw->hdev, nw->vendor_skb_probe_rsp,
+				   HIF_TYPE_FRAME, false, false);
 		nw->vendor_skb_probe_rsp = NULL;
 	}
 
 	if (nw->vendor_skb_assoc_req) {
-		NRC_SKB_TRACK_FREE(nw->hdev, nw->vendor_skb_assoc_req, HIF_TYPE_FRAME, false, false);
+		NRC_SKB_TRACK_FREE(nw->hdev, nw->vendor_skb_assoc_req,
+				   HIF_TYPE_FRAME, false, false);
 		nw->vendor_skb_assoc_req = NULL;
 	}
 
 	/* Cleanup WLAN-specific workqueues */
 	nrc_wlan_workqueue_deinit(nw);
 
-	// DBG_ST("WLAN: WLAN-specific cleanup completed");
+	// DBG_STATE("WLAN: WLAN-specific cleanup completed");
 }
 
 /* Helper functions for WLAN-specific initialization */

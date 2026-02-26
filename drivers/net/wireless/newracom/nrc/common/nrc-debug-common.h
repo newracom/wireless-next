@@ -43,16 +43,29 @@ enum NRC_DEBUG_MASK {
 	NRC_DBG_PS = 7,
 	NRC_DBG_STATS = 8,
 	NRC_DBG_STATE = 9,
-	NRC_DBG_FW = 10,
-	NRC_DBG_AMPDU = 11,
-	NRC_DBG_CREDIT = 12,
-	NRC_DBG_SLOT = 13,
-	NRC_DBG_BUS = 14,
+	NRC_DBG_BD = 10,
+	NRC_DBG_FW = 11,
+	NRC_DBG_AMPDU = 12,
+	NRC_DBG_CREDIT = 13,
+	NRC_DBG_SLOT = 14,
+	NRC_DBG_BUS = 15,
 };
 
 #define NRC_DBG_MASK_ANY (0xFFFFFFFF)
 #define DEFAULT_NRC_DBG_MASK_ALL (NRC_DBG_MASK_ANY)
 #define DEFAULT_NRC_DBG_MASK (BIT(NRC_DBG_BASIC) | BIT(NRC_DBG_STATE))
+
+/* Category name mapping - must match enum NRC_DEBUG_MASK order */
+static const char *const nrc_debug_category_names[] = {
+	[NRC_DBG_BASIC] = "Dbg",   [NRC_DBG_HIF] = "Hif",
+	[NRC_DBG_WIM] = "Wim",	   [NRC_DBG_TX] = "Tx",
+	[NRC_DBG_RX] = "Rx",	   [NRC_DBG_MAC] = "Mac",
+	[NRC_DBG_CAPI] = "Capi",   [NRC_DBG_PS] = "Ps",
+	[NRC_DBG_STATS] = "Stats", [NRC_DBG_STATE] = "State",
+	[NRC_DBG_BD] = "Bd",	   [NRC_DBG_FW] = "Fw",
+	[NRC_DBG_AMPDU] = "Ampdu", [NRC_DBG_CREDIT] = "Credit",
+	[NRC_DBG_SLOT] = "Slot",   [NRC_DBG_BUS] = "Bus",
+};
 
 /* Debug print flags - can be overridden per module */
 #ifndef NRC_DBG_PRINT_FRAME_TX
@@ -67,171 +80,160 @@ enum NRC_DEBUG_MASK {
 #define NRC_DBG_PRINT_ARP_FRAME 0
 #endif
 
-/* Level-based debug macros with category prefix */
-/* DBG level macros - detailed debug information (only in DEBUG builds) */
-#define DBG_HIF(fmt, ...) \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_HIF, "Hif " fmt, ##__VA_ARGS__)
-#define DBG_WIM(fmt, ...) \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_WIM, "Wim " fmt, ##__VA_ARGS__)
-#define DBG_TX(fmt, ...) \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_TX, "Tx " fmt, ##__VA_ARGS__)
-#define DBG_RX(fmt, ...) \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_RX, "Rx " fmt, ##__VA_ARGS__)
-#define DBG_MAC(fmt, ...) \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_MAC, "Mac " fmt, ##__VA_ARGS__)
-#define DBG_CAPI(fmt, ...)                                          \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_CAPI, "Capi " fmt, \
-		      ##__VA_ARGS__)
-#define DBG_PS(fmt, ...) \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_PS, "Ps " fmt, ##__VA_ARGS__)
-#define DBG_STS(fmt, ...)                                           \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_STATS, "Sts " fmt, \
-		      ##__VA_ARGS__)
-#define DBG_ST(fmt, ...)                                           \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_STATE, "St " fmt, \
-		      ##__VA_ARGS__)
-#define DBG_FW(fmt, ...) \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_FW, "Fw " fmt, ##__VA_ARGS__)
-#define DBG_AMPDU(fmt, ...)                                           \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_AMPDU, "Ampdu " fmt, \
-		      ##__VA_ARGS__)
-#define DBG_CREDIT(fmt, ...)                                            \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_CREDIT, "Credit " fmt, \
-		      ##__VA_ARGS__)
-#define DBG_SLOT(fmt, ...)                                          \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_SLOT, "Slot " fmt, \
-		      ##__VA_ARGS__)
-#define DBG_BUS(fmt, ...) \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_BUS, "Bus " fmt, ##__VA_ARGS__)
+/* Category token to bitmask converter helper */
+#define CAT(c) BIT(NRC_DBG_##c)
 
-/* Multi-mask debug macros - output if ANY of the masks are enabled */
-#define DBG_MULTI(masks, fmt, ...) \
+/* General debug macro - multi-mask support */
+#define DBG(masks, fmt, ...) \
 	nrc_dbg_level_multi(NRC_DBG_LEVEL_DBG, masks, fmt, ##__VA_ARGS__)
 
-/* Convenience macros for common combinations */
-#define DBG_TX_CREDIT(fmt, ...) \
-	DBG_MULTI(BIT(NRC_DBG_TX) | BIT(NRC_DBG_CREDIT), fmt, ##__VA_ARGS__)
-
-#define DBG_RX_CREDIT(fmt, ...) \
-	DBG_MULTI(BIT(NRC_DBG_RX) | BIT(NRC_DBG_CREDIT), fmt, ##__VA_ARGS__)
-
-#define DBG_TX_SLOT(fmt, ...) \
-	DBG_MULTI(BIT(NRC_DBG_TX) | BIT(NRC_DBG_SLOT), fmt, ##__VA_ARGS__)
-
-#define DBG_RX_SLOT(fmt, ...) \
-	DBG_MULTI(BIT(NRC_DBG_RX) | BIT(NRC_DBG_SLOT), fmt, ##__VA_ARGS__)
-
-#define DBG_TX_MAC(fmt, ...) \
-	DBG_MULTI(BIT(NRC_DBG_TX) | BIT(NRC_DBG_MAC), fmt, ##__VA_ARGS__)
-
-#define DBG_RX_MAC(fmt, ...) \
-	DBG_MULTI(BIT(NRC_DBG_RX) | BIT(NRC_DBG_MAC), fmt, ##__VA_ARGS__)
-
-#define DBG_HIF_TX(fmt, ...) \
-	DBG_MULTI(BIT(NRC_DBG_HIF) | BIT(NRC_DBG_TX), fmt, ##__VA_ARGS__)
-
-#define DBG_HIF_RX(fmt, ...) \
-	DBG_MULTI(BIT(NRC_DBG_HIF) | BIT(NRC_DBG_RX), fmt, ##__VA_ARGS__)
-
-#define DBG_HIF_FW(fmt, ...) \
-	DBG_MULTI(BIT(NRC_DBG_HIF) | BIT(NRC_DBG_FW), fmt, ##__VA_ARGS__)
-
-/* General debug macro - basic category */
-#define DBG(fmt, ...)                                               \
-	nrc_dbg_level(NRC_DBG_LEVEL_DBG, NRC_DBG_BASIC, "Dbg " fmt, \
-		      ##__VA_ARGS__)
+/* Level-based debug macros with category prefix */
+/* DBG level macros - detailed debug information (only in DEBUG builds) */
+/* Category prefix is automatically added by nrc_dbg_level_multi */
+#define DBG_HIF(fmt, ...) DBG(CAT(HIF), fmt, ##__VA_ARGS__)
+#define DBG_WIM(fmt, ...) DBG(CAT(WIM), fmt, ##__VA_ARGS__)
+#define DBG_TX(fmt, ...) DBG(CAT(TX), fmt, ##__VA_ARGS__)
+#define DBG_RX(fmt, ...) DBG(CAT(RX), fmt, ##__VA_ARGS__)
+#define DBG_MAC(fmt, ...) DBG(CAT(MAC), fmt, ##__VA_ARGS__)
+#define DBG_CAPI(fmt, ...) DBG(CAT(CAPI), fmt, ##__VA_ARGS__)
+#define DBG_PS(fmt, ...) DBG(CAT(PS), fmt, ##__VA_ARGS__)
+#define DBG_STATS(fmt, ...) DBG(CAT(STATS), fmt, ##__VA_ARGS__)
+#define DBG_STATE(fmt, ...) DBG(CAT(STATE), fmt, ##__VA_ARGS__)
+#define DBG_BD(fmt, ...) DBG(CAT(BD), fmt, ##__VA_ARGS__)
+#define DBG_FW(fmt, ...) DBG(CAT(FW), fmt, ##__VA_ARGS__)
+#define DBG_AMPDU(fmt, ...) DBG(CAT(AMPDU), fmt, ##__VA_ARGS__)
+#define DBG_CREDIT(fmt, ...) DBG(CAT(CREDIT), fmt, ##__VA_ARGS__)
+#define DBG_SLOT(fmt, ...) DBG(CAT(SLOT), fmt, ##__VA_ARGS__)
+#define DBG_BUS(fmt, ...) DBG(CAT(BUS), fmt, ##__VA_ARGS__)
 
 /* INFO level macros - informational messages (shown by default) */
 #define INFO(fmt, ...)                                                \
 	nrc_dbg_level(NRC_DBG_LEVEL_INFO, NRC_DBG_BASIC, "Info " fmt, \
 		      ##__VA_ARGS__)
 
-/* WARN level macros - warning messages with function name and line number */
+/* Category-based helper macros using category name array */
+#define INFO_CAT(c, fmt, ...)                                                 \
+	nrc_dbg_info("Info [%s] " fmt, nrc_debug_category_names[NRC_DBG_##c], \
+		     ##__VA_ARGS__)
+
+#define WARN_CAT(c, fmt, ...)                                         \
+	nrc_dbg_warn("Warning [%s] %s:%d " fmt,                       \
+		     nrc_debug_category_names[NRC_DBG_##c], __func__, \
+		     __LINE__, ##__VA_ARGS__)
+
+#define ERR_CAT(c, fmt, ...)                                                   \
+	nrc_dbg_err("Error [%s] %s:%d " fmt,                                   \
+		    nrc_debug_category_names[NRC_DBG_##c], __func__, __LINE__, \
+		    ##__VA_ARGS__)
+
+/* Legacy string-based macros - deprecated, use _CAT versions */
+#define INFo(category, fmt, ...) \
+	nrc_dbg_info("Info [" category "] " fmt "", ##__VA_ARGS__)
+
 #define WARn(category, fmt, ...)                                       \
 	nrc_dbg_warn("Warning [" category "] %s:%d " fmt "", __func__, \
 		     __LINE__, ##__VA_ARGS__)
 
-/* ERR level macros - error messages with function name and line number (always shown) */
 #define ERR(category, fmt, ...)                                               \
 	nrc_dbg_err("Error [" category "] %s:%d " fmt "", __func__, __LINE__, \
 		    ##__VA_ARGS__)
 
-/* Category-specific warning macros */
-#define WARN_WIM(fmt, ...) WARn("Wim", fmt, ##__VA_ARGS__)
-#define WARN_HIF(fmt, ...) WARn("Hif", fmt, ##__VA_ARGS__)
-#define WARN_FW(fmt, ...) WARn("Fw", fmt, ##__VA_ARGS__)
-#define WARN_INIT(fmt, ...) WARn("Init", fmt, ##__VA_ARGS__)
-#define WARN_BD(fmt, ...) WARn("Bd", fmt, ##__VA_ARGS__)
-#define WARN_PS(fmt, ...) WARn("Ps", fmt, ##__VA_ARGS__)
-#define WARN_TX(fmt, ...) WARn("Tx", fmt, ##__VA_ARGS__)
-#define WARN_RX(fmt, ...) WARn("Rx", fmt, ##__VA_ARGS__)
-#define WARN_SPI(fmt, ...) WARn("Spi", fmt, ##__VA_ARGS__)
-#define WARN_CB(fmt, ...) WARn("Cb", fmt, ##__VA_ARGS__)
-#define WARN_HAL(fmt, ...) WARn("Hal", fmt, ##__VA_ARGS__)
-#define WARN_WLAN(fmt, ...) WARn("Wlan", fmt, ##__VA_ARGS__)
-#define WARN_MCP(fmt, ...) WARn("Mcp", fmt, ##__VA_ARGS__)
+/* Category-specific info macros - Common categories only */
+#define INFO_WIM(fmt, ...) INFO_CAT(WIM, fmt, ##__VA_ARGS__)
+#define INFO_HIF(fmt, ...) INFO_CAT(HIF, fmt, ##__VA_ARGS__)
+#define INFO_BD(fmt, ...) INFO_CAT(BD, fmt, ##__VA_ARGS__)
+#define INFO_FW(fmt, ...) INFO_CAT(FW, fmt, ##__VA_ARGS__)
+#define INFO_PS(fmt, ...) INFO_CAT(PS, fmt, ##__VA_ARGS__)
+#define INFO_TX(fmt, ...) INFO_CAT(TX, fmt, ##__VA_ARGS__)
+#define INFO_RX(fmt, ...) INFO_CAT(RX, fmt, ##__VA_ARGS__)
+#define INFO_MAC(fmt, ...) INFO_CAT(MAC, fmt, ##__VA_ARGS__)
+#define INFO_CAPI(fmt, ...) INFO_CAT(CAPI, fmt, ##__VA_ARGS__)
+#define INFO_STATS(fmt, ...) INFO_CAT(STATS, fmt, ##__VA_ARGS__)
+#define INFO_STATE(fmt, ...) INFO_CAT(STATE, fmt, ##__VA_ARGS__)
+#define INFO_AMPDU(fmt, ...) INFO_CAT(AMPDU, fmt, ##__VA_ARGS__)
+#define INFO_CREDIT(fmt, ...) INFO_CAT(CREDIT, fmt, ##__VA_ARGS__)
+#define INFO_SLOT(fmt, ...) INFO_CAT(SLOT, fmt, ##__VA_ARGS__)
+#define INFO_BUS(fmt, ...) INFO_CAT(BUS, fmt, ##__VA_ARGS__)
 
-/* Category-specific error macros */
-#define ERR_WIM(fmt, ...) ERR("Wim", fmt, ##__VA_ARGS__)
-#define ERR_HIF(fmt, ...) ERR("Hif", fmt, ##__VA_ARGS__)
-#define ERR_FW(fmt, ...) ERR("Fw", fmt, ##__VA_ARGS__)
-#define ERR_INIT(fmt, ...) ERR("Init", fmt, ##__VA_ARGS__)
-#define ERR_BD(fmt, ...) ERR("Bd", fmt, ##__VA_ARGS__)
-#define ERR_PS(fmt, ...) ERR("Ps", fmt, ##__VA_ARGS__)
-#define ERR_TX(fmt, ...) ERR("Tx", fmt, ##__VA_ARGS__)
-#define ERR_RX(fmt, ...) ERR("Rx", fmt, ##__VA_ARGS__)
-#define ERR_SPI(fmt, ...) ERR("Spi", fmt, ##__VA_ARGS__)
-#define ERR_CB(fmt, ...) ERR("Cb", fmt, ##__VA_ARGS__)
-#define ERR_HAL(fmt, ...) ERR("Hal", fmt, ##__VA_ARGS__)
-#define ERR_WLAN(fmt, ...) ERR("Wlan", fmt, ##__VA_ARGS__)
-#define ERR_MCP(fmt, ...) ERR("Mcp", fmt, ##__VA_ARGS__)
+/* Category-specific warning macros - Common categories only */
+#define WARN_WIM(fmt, ...) WARN_CAT(WIM, fmt, ##__VA_ARGS__)
+#define WARN_HIF(fmt, ...) WARN_CAT(HIF, fmt, ##__VA_ARGS__)
+#define WARN_BD(fmt, ...) WARN_CAT(BD, fmt, ##__VA_ARGS__)
+#define WARN_FW(fmt, ...) WARN_CAT(FW, fmt, ##__VA_ARGS__)
+#define WARN_PS(fmt, ...) WARN_CAT(PS, fmt, ##__VA_ARGS__)
+#define WARN_TX(fmt, ...) WARN_CAT(TX, fmt, ##__VA_ARGS__)
+#define WARN_RX(fmt, ...) WARN_CAT(RX, fmt, ##__VA_ARGS__)
+#define WARN_MAC(fmt, ...) WARN_CAT(MAC, fmt, ##__VA_ARGS__)
+#define WARN_CAPI(fmt, ...) WARN_CAT(CAPI, fmt, ##__VA_ARGS__)
+#define WARN_STATS(fmt, ...) WARN_CAT(STATS, fmt, ##__VA_ARGS__)
+#define WARN_STATE(fmt, ...) WARN_CAT(STATE, fmt, ##__VA_ARGS__)
+#define WARN_AMPDU(fmt, ...) WARN_CAT(AMPDU, fmt, ##__VA_ARGS__)
+#define WARN_CREDIT(fmt, ...) WARN_CAT(CREDIT, fmt, ##__VA_ARGS__)
+#define WARN_SLOT(fmt, ...) WARN_CAT(SLOT, fmt, ##__VA_ARGS__)
+#define WARN_BUS(fmt, ...) WARN_CAT(BUS, fmt, ##__VA_ARGS__)
+
+/* Category-specific error macros - Common categories only */
+#define ERR_WIM(fmt, ...) ERR_CAT(WIM, fmt, ##__VA_ARGS__)
+#define ERR_HIF(fmt, ...) ERR_CAT(HIF, fmt, ##__VA_ARGS__)
+#define ERR_BD(fmt, ...) ERR_CAT(BD, fmt, ##__VA_ARGS__)
+#define ERR_FW(fmt, ...) ERR_CAT(FW, fmt, ##__VA_ARGS__)
+#define ERR_PS(fmt, ...) ERR_CAT(PS, fmt, ##__VA_ARGS__)
+#define ERR_TX(fmt, ...) ERR_CAT(TX, fmt, ##__VA_ARGS__)
+#define ERR_RX(fmt, ...) ERR_CAT(RX, fmt, ##__VA_ARGS__)
+#define ERR_MAC(fmt, ...) ERR_CAT(MAC, fmt, ##__VA_ARGS__)
+#define ERR_CAPI(fmt, ...) ERR_CAT(CAPI, fmt, ##__VA_ARGS__)
+#define ERR_STATS(fmt, ...) ERR_CAT(STATS, fmt, ##__VA_ARGS__)
+#define ERR_STATE(fmt, ...) ERR_CAT(STATE, fmt, ##__VA_ARGS__)
+#define ERR_AMPDU(fmt, ...) ERR_CAT(AMPDU, fmt, ##__VA_ARGS__)
+#define ERR_CREDIT(fmt, ...) ERR_CAT(CREDIT, fmt, ##__VA_ARGS__)
+#define ERR_SLOT(fmt, ...) ERR_CAT(SLOT, fmt, ##__VA_ARGS__)
+#define ERR_BUS(fmt, ...) ERR_CAT(BUS, fmt, ##__VA_ARGS__)
 
 /* MAC address formatting macros */
 #define MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
 #define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
 
 /* Global debug variables - each module should define these */
-extern unsigned long nrc_debug_mask;
-extern enum NRC_DEBUG_LEVEL nrc_debug_level;
+extern unsigned long debug_mask;
+extern int debug_level;
 extern struct device *g_dev;
 
 /* Core debug functions - inline implementations for common use */
 static inline void nrc_dbg_init(struct device *dev)
 {
-	nrc_debug_mask = DEFAULT_NRC_DBG_MASK;
-	nrc_debug_level = DEFAULT_NRC_DBG_LEVEL;
+	/* Module parameters (debug_level, debug_mask) are already set during insmod */
 	g_dev = dev;
 }
 
 static inline void nrc_dbg_enable(enum NRC_DEBUG_MASK mk)
 {
-	set_bit(mk, &nrc_debug_mask);
+	set_bit(mk, &debug_mask);
 }
 
 static inline void nrc_dbg_disable(enum NRC_DEBUG_MASK mk)
 {
-	clear_bit(mk, &nrc_debug_mask);
+	clear_bit(mk, &debug_mask);
 }
 
 static inline void nrc_dbg_set_level(enum NRC_DEBUG_LEVEL level)
 {
 	if (level < NRC_DBG_LEVEL_MAX)
-		nrc_debug_level = level;
+		debug_level = level;
 }
 
 static inline enum NRC_DEBUG_LEVEL nrc_dbg_get_level(void)
 {
-	return nrc_debug_level;
+	return debug_level;
 }
 
 static inline void nrc_hal_set_debug_mask(unsigned long mask)
 {
-	nrc_debug_mask = mask;
+	debug_mask = mask;
 }
 
 static inline void nrc_set_debug_mask(unsigned long mask)
 {
-	nrc_debug_mask = mask;
+	debug_mask = mask;
 }
 
 /* Warning function - shown based on level, no mask check */
@@ -244,7 +246,7 @@ static inline void nrc_dbg_warn(const char *fmt, ...)
 	};
 
 	/* WARN level messages: only check if level allows WARN */
-	if (NRC_DBG_LEVEL_WARN > nrc_debug_level)
+	if (NRC_DBG_LEVEL_WARN > debug_level)
 		return;
 
 	/* No category mask check for warnings - they should be shown based on level only */
@@ -264,6 +266,36 @@ static inline void nrc_dbg_warn(const char *fmt, ...)
 		dev_warn(g_dev, "%s\n", buf); /* Use dev_warn for warnings */
 }
 
+/* Info function - shown based on level, no mask check */
+static inline void nrc_dbg_info(const char *fmt, ...)
+{
+	va_list args;
+	int i;
+	static char buf[512] = {
+		0,
+	};
+
+	/* INFO level messages: only check if level allows INFO */
+	if (NRC_DBG_LEVEL_INFO > debug_level)
+		return;
+
+	/* No category mask check for info - they should be shown based on level only */
+
+	va_start(args, fmt);
+	if (fmt != NULL) {
+		i = vsnprintf(buf, sizeof(buf), fmt, args);
+	} else {
+		strcpy(buf, "Format string is NULL !!!");
+		i = strlen(buf);
+	}
+	va_end(args);
+
+	if (g_dev == NULL)
+		pr_info("%s\n", buf); /* Use pr_info for info */
+	else
+		dev_info(g_dev, "%s\n", buf); /* Use dev_info for info */
+}
+
 /* Error function - always shown, no mask check (only level check) */
 static inline void nrc_dbg_err(const char *fmt, ...)
 {
@@ -274,7 +306,7 @@ static inline void nrc_dbg_err(const char *fmt, ...)
 	};
 
 	/* ERR level messages: only check if level allows ERR (should always pass) */
-	if (NRC_DBG_LEVEL_ERR > nrc_debug_level)
+	if (NRC_DBG_LEVEL_ERR > debug_level)
 		return;
 
 	/* No category mask check for errors - they should always be shown */
@@ -305,11 +337,11 @@ static inline void nrc_dbg_level(enum NRC_DEBUG_LEVEL level,
 	};
 
 	/* Check debug level first - skip if message level is higher than current level */
-	if (level > nrc_debug_level)
+	if (level > debug_level)
 		return;
 
 	/* Then check category mask */
-	if (!test_bit(mk, &nrc_debug_mask))
+	if (!test_bit(mk, &debug_mask))
 		return;
 
 	va_start(args, fmt);
@@ -342,12 +374,12 @@ static inline void nrc_dbg_level_multi(enum NRC_DEBUG_LEVEL level,
 	int count = 0;
 
 	/* Check debug level first */
-	if (level > nrc_debug_level)
+	if (level > debug_level)
 		return;
 
 	/* Check if ANY of the provided masks are enabled */
 	for (i = 0; i < 32; i++) {
-		if ((masks & BIT(i)) && test_bit(i, &nrc_debug_mask)) {
+		if ((masks & BIT(i)) && test_bit(i, &debug_mask)) {
 			matched = true;
 			break;
 		}
@@ -356,56 +388,14 @@ static inline void nrc_dbg_level_multi(enum NRC_DEBUG_LEVEL level,
 	if (!matched)
 		return;
 
-	/* Build prefix from all masks in the combination */
-	if (masks & BIT(NRC_DBG_HIF)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sHif",
-				count ? "/" : "");
-		count++;
-	}
-	if (masks & BIT(NRC_DBG_WIM)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sWim",
-				count ? "/" : "");
-		count++;
-	}
-	if (masks & BIT(NRC_DBG_TX)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sTx",
-				count ? "/" : "");
-		count++;
-	}
-	if (masks & BIT(NRC_DBG_RX)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sRx",
-				count ? "/" : "");
-		count++;
-	}
-	if (masks & BIT(NRC_DBG_MAC)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sMac",
-				count ? "/" : "");
-		count++;
-	}
-	if (masks & BIT(NRC_DBG_PS)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sPs",
-				count ? "/" : "");
-		count++;
-	}
-	if (masks & BIT(NRC_DBG_AMPDU)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sAmpdu",
-				count ? "/" : "");
-		count++;
-	}
-	if (masks & BIT(NRC_DBG_CREDIT)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sCredit",
-				count ? "/" : "");
-		count++;
-	}
-	if (masks & BIT(NRC_DBG_SLOT)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sSlot",
-				count ? "/" : "");
-		count++;
-	}
-	if (masks & BIT(NRC_DBG_BUS)) {
-		pos += snprintf(prefix + pos, sizeof(prefix) - pos, "%sBus",
-				count ? "/" : "");
-		count++;
+	/* Build prefix from all masks in the combination - loop-based approach */
+	for (i = 0; i < ARRAY_SIZE(nrc_debug_category_names); i++) {
+		if (masks & BIT(i)) {
+			pos += snprintf(prefix + pos, sizeof(prefix) - pos,
+					"%s%s", count ? "/" : "",
+					nrc_debug_category_names[i]);
+			count++;
+		}
 	}
 
 	/* Add trailing space */
@@ -419,37 +409,6 @@ static inline void nrc_dbg_level_multi(enum NRC_DEBUG_LEVEL level,
 		vsnprintf(buf + i, sizeof(buf) - i, fmt, args);
 	} else {
 		strcpy(buf, "Format string is NULL !!!");
-	}
-	va_end(args);
-
-	if (g_dev == NULL)
-		pr_info("%s\n", buf);
-	else
-		dev_info(g_dev, "%s\n", buf);
-}
-
-/* Legacy nrc_dbg function - compatibility wrapper (defaults to DBG level) */
-static inline void nrc_dbg(enum NRC_DEBUG_MASK mk, const char *fmt, ...)
-{
-	va_list args;
-	int i;
-	static char buf[512] = {
-		0,
-	};
-
-	/* Default to DBG level for legacy compatibility */
-	if (NRC_DBG_LEVEL_DBG > nrc_debug_level)
-		return;
-
-	if (!test_bit(mk, &nrc_debug_mask))
-		return;
-
-	va_start(args, fmt);
-	if (fmt != NULL) {
-		i = vsnprintf(buf, sizeof(buf), fmt, args);
-	} else {
-		strcpy(buf, "Format string is NULL !!!");
-		i = strlen(buf);
 	}
 	va_end(args);
 

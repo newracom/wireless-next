@@ -183,7 +183,7 @@
 #define ieee80211_hw_check(hw, flg) (hw->flags & IEEE80211_HW_##flg)
 #endif
 
-#if defined(CONFIG_WIRELESS_WDS) /*|| defined(CONFIG_USE_CHANNEL_CONTEXT)*/
+#if defined(CONFIG_WIRELESS_WDS) || defined(CONFIG_USE_CHANNEL_CONTEXT)
 /* Cannot use CONFIG_USE_CHANNEL_CONTEXT) */
 #undef CONFIG_USE_CHANNEL_CONTEXT
 #endif

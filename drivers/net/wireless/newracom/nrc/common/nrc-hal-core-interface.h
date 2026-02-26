@@ -32,7 +32,7 @@ extern struct nrc_hif_device *nrc_hal_core_get_hdev(void);
 
 /* HAL initialization */
 extern int nrc_hal_core_nw_init(struct nrc *nw, struct nrc_hif_device *hdev);
-extern void nrc_hal_core_nw_cleanup(struct nrc_hif_device *hdev);
+extern void nrc_hal_core_nw_cleanup(struct nrc_hif_device *hdev, struct nrc *nw);
 
 /**
  * struct nrc_hal_ops - HAL operations for frontend modules

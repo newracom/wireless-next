@@ -21,6 +21,14 @@
 
 #include <linux/spi/spi.h>
 
+/* Include common debug interface */
+#include "nrc-debug-common.h"
+
+/* SPI-specific debug macros */
+#define INFO_SPI(fmt, ...) INFo("Spi", fmt, ##__VA_ARGS__)
+#define WARN_SPI(fmt, ...) WARn("Spi", fmt, ##__VA_ARGS__)
+#define ERR_SPI(fmt, ...) ERR("Spi", fmt, ##__VA_ARGS__)
+
 /* ===========================================================================
  * SPI Debug Function Prototypes
  * =========================================================================== */

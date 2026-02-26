@@ -21,12 +21,20 @@
 
 #include <linux/device.h>
 
+/* Include common debug interface */
+#include "nrc-debug-common.h"
+
 /* Forward declarations */
 struct mcp_priv;
 
 /* Global variables */
 extern unsigned long nrc_debug_mask;
 extern struct device *g_dev;
+
+/* MCP-specific debug macros */
+#define INFO_MCP(fmt, ...) INFo("Mcp", fmt, ##__VA_ARGS__)
+#define WARN_MCP(fmt, ...) WARn("Mcp", fmt, ##__VA_ARGS__)
+#define ERR_MCP(fmt, ...) ERR("Mcp", fmt, ##__VA_ARGS__)
 
 /* MCP Debug Functions */
 void nrc_init_debugfs(struct mcp_priv *mcp);

@@ -25,6 +25,13 @@
 #include <net/genetlink.h>
 #include <linux/spi/spi.h>
 
+/* Common directory headers - Debug & Trace */
+#include "nrc-debug-common.h"
+
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
+/* Local module headers */
 #include "nrc-log.h"
 #include "nrc-hif.h"
 #include "mcp.h"
@@ -120,8 +127,8 @@ int send_to_netlink(int id, struct sk_buff *skb, struct nrc_hif_device *hdev,
 	genlmsg_end(reply_skb, reply_head);
 
 	LOG_WIM("Send to netlink: %s(%d), input_skb=%d, reply_skb=%d",
-		channel_id_to_str(id), id,
-		skb ? skb->len : 0, reply_skb ? reply_skb->len : 0);
+		channel_id_to_str(id), id, skb ? skb->len : 0,
+		reply_skb ? reply_skb->len : 0);
 
 	genlmsg_unicast(&init_net, reply_skb, user_info[id].portid);
 
@@ -273,11 +280,11 @@ static int process_driver_h2d(struct sk_buff *skb, struct genl_info *info)
 	}
 	if (tlv->t == TLV_TYPE_DRIVER_FIRMWARE) {
 		driver_firmware_t *firmware = (driver_firmware_t *)(tlv + 1);
-		LOG_INFO("MCP: Firmware download requested: %s",
+		LOG_INFO("MCP: Firmware download request skipped: %s",
 			 firmware->name);
 
 		/* Trigger network restart which will handle firmware download */
-		nrc_hal_ops_nw_restart();
+		// nrc_hal_ops_nw_restart();
 	} else if (tlv->t == TLV_TYPE_DRIVER_SET_LOG) {
 		driver_log_level_t *log = (driver_log_level_t *)(tlv + 1);
 

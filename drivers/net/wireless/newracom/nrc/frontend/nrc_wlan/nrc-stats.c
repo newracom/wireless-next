@@ -404,7 +404,7 @@ void nrc_stats_deinit(void)
 	spin_lock(&state_lock);
 	list_for_each_entry_safe(cur, next, &state_head, list)
 	{
-		DBG_STS("[deinit] %pM", cur->macaddr);
+		DBG_STATS("[deinit] %pM", cur->macaddr);
 		list_del(&cur->list);
 		kfree(cur->rssi);
 		kfree(cur->snr);
@@ -441,7 +441,7 @@ int nrc_stats_add(uint8_t *macaddr, int count)
 	list_for_each_entry_safe(cur, next, &state_head, list)
 	{
 		if (memcmp(cur->macaddr, macaddr, 6) == 0) {
-			DBG_STS("[exist] %pM", cur->macaddr);
+			DBG_STATS("[exist] %pM", cur->macaddr);
 			spin_unlock(&state_lock);
 			return 0;
 		}
@@ -462,7 +462,7 @@ int nrc_stats_add(uint8_t *macaddr, int count)
 	sta->rssi = nrc_stats_rssi_init2();
 	sta->snr = nrc_stats_snr_init2();
 
-	DBG_STS("[add] %pM", macaddr);
+	DBG_STATS("[add] %pM", macaddr);
 	spin_unlock(&state_lock);
 
 	return 0;
@@ -496,7 +496,7 @@ void nrc_stats_print(void)
 	spin_lock(&state_lock);
 	list_for_each_entry_safe(cur, next, &state_head, list)
 	{
-		DBG_STS("[%d] %pM snr:%d, rssi:%d", i++, cur->macaddr,
+		DBG_STATS("[%d] %pM snr:%d, rssi:%d", i++, cur->macaddr,
 			moving_average_compute(cur->snr),
 			moving_average_compute(cur->rssi));
 	}
@@ -646,7 +646,7 @@ int nrc_stats_channel_noise_update(uint32_t freq, int8_t noise)
 	channel_noise_info[state_channel_num].chan->center_freq = freq;
 	state_channel_num++;
 
-	DBG_STS("[add channel noise] freq : %d, noise : %d, chan_num : %d",
+	DBG_STATS("[add channel noise] freq : %d, noise : %d, chan_num : %d",
 		freq, noise, state_channel_num);
 
 	return 0;
@@ -657,7 +657,7 @@ int nrc_stats_channel_noise_reset(void)
 	int i;
 
 	for (i = 0; i < state_channel_num; i++) {
-		DBG_STS("[remove channel noise] freq : %d",
+		DBG_STATS("[remove channel noise] freq : %d",
 			channel_noise_info[i].chan->center_freq);
 		channel_noise_info[i].noise = 0;
 		kfree(channel_noise_info[i].chan);

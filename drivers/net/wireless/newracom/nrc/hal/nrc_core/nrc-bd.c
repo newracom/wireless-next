@@ -388,7 +388,7 @@ struct wim_bd_param *nrc_read_bd_tx_pwr(struct nrc_hif_device *hdev,
 	if (!g_bd_size)
 		return NULL;
 	else
-		DBG_FW("size of bd file is %d", g_bd_size);
+		DBG_BD("size of bd file is %d", g_bd_size);
 
 	if (country_code[0] == 'U' && country_code[1] == 'S')
 		cc_index = CC_US;
@@ -415,7 +415,7 @@ struct wim_bd_param *nrc_read_bd_tx_pwr(struct nrc_hif_device *hdev,
 		country_code[0] = 'E';
 		country_code[1] = 'U';
 	} else {
-		DBG_ST("[ERR] Invalid country code(%c%c). Set default value(%d)",
+		DBG_STATE("[ERR] Invalid country code(%c%c). Set default value(%d)",
 		       country_code[0], country_code[1], cc_index);
 		return NULL;
 	}
@@ -426,7 +426,7 @@ struct wim_bd_param *nrc_read_bd_tx_pwr(struct nrc_hif_device *hdev,
 		return NULL;
 	}
 
-	DBG_FW("Major %02X Minor %02X Total len %04X Num_Data_Groups %04X Checksum %04X",
+	DBG_BD("Major %02X Minor %02X Total len %04X Num_Data_Groups %04X Checksum %04X",
 	       bd->ver_major, bd->ver_minor, bd->total_len, bd->num_data_groups,
 	       bd->checksum_data);
 
@@ -484,7 +484,7 @@ struct wim_bd_param *nrc_read_bd_tx_pwr(struct nrc_hif_device *hdev,
 						bd->data[8 + len + 4 * i + j];
 				}
 				check_bd_flag = true;
-				DBG_FW("type %04X, len %04X, checksum %04X target_ver %04X",
+				DBG_BD("type %04X, len %04X, checksum %04X target_ver %04X",
 				       bd_sel->type, bd_sel->length,
 				       bd_sel->checksum, bd_sel->hw_version);
 				break;
@@ -496,7 +496,7 @@ struct wim_bd_param *nrc_read_bd_tx_pwr(struct nrc_hif_device *hdev,
 
 	// Log version match result once after loop
 	if (check_bd_flag) {
-		DBG_FW("[BD] target version is matched(%u : %u)",
+		DBG_BD("[BD] target version is matched(%u : %u)",
 		       target_version, bd_sel->hw_version);
 	} else {
 		ERR_BD("[BD] target version is not matched(%u)",

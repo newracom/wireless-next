@@ -88,7 +88,7 @@ static void nrc_hal_unregister_ops(void)
 static int nrc_hal_hdev_init(struct nrc_hif_device *hdev)
 {
 	if (!hdev) {
-		ERR_INIT("Invalid HIF device");
+		ERR_HIF("Invalid HIF device");
 		return -EINVAL;
 	}
 
@@ -96,7 +96,7 @@ static int nrc_hal_hdev_init(struct nrc_hif_device *hdev)
 	hdev->workqueue =
 		alloc_workqueue("nrc_wlan_wq", WQ_UNBOUND | WQ_HIGHPRI, 1);
 	if (!hdev->workqueue) {
-		ERR_INIT("Failed to create WLAN workqueue");
+		ERR_HIF("Failed to create WLAN workqueue");
 		return -ENOMEM;
 	}
 
@@ -104,7 +104,7 @@ static int nrc_hal_hdev_init(struct nrc_hif_device *hdev)
 	hdev->mcp_workqueue =
 		alloc_workqueue("nrc_mcp_wq", WQ_UNBOUND | WQ_HIGHPRI, 1);
 	if (!hdev->mcp_workqueue) {
-		ERR_INIT("Failed to create MCP workqueue");
+		ERR_HIF("Failed to create MCP workqueue");
 		destroy_workqueue(hdev->workqueue);
 		hdev->workqueue = NULL;
 		return -ENOMEM;
@@ -113,7 +113,7 @@ static int nrc_hal_hdev_init(struct nrc_hif_device *hdev)
 	hdev->event_workqueue =
 		alloc_workqueue("nrc_event_wq", WQ_UNBOUND | WQ_HIGHPRI, 1);
 	if (!hdev->event_workqueue) {
-		ERR_INIT("Failed to create event workqueue");
+		ERR_HIF("Failed to create event workqueue");
 		destroy_workqueue(hdev->mcp_workqueue);
 		destroy_workqueue(hdev->workqueue);
 		hdev->mcp_workqueue = NULL;
@@ -123,7 +123,7 @@ static int nrc_hal_hdev_init(struct nrc_hif_device *hdev)
 
 	hdev->restart_workqueue = create_singlethread_workqueue("nrc_restart");
 	if (!hdev->restart_workqueue) {
-		ERR_INIT("Failed to create restart workqueue");
+		ERR_HIF("Failed to create restart workqueue");
 		destroy_workqueue(hdev->event_workqueue);
 		destroy_workqueue(hdev->mcp_workqueue);
 		destroy_workqueue(hdev->workqueue);
@@ -208,7 +208,7 @@ try:
 	}
 
 	if (ret) {
-		ERR_INIT("Failed to nrc_hif_probe %d", ret);
+		ERR_HIF("Failed to nrc_hif_probe %d", ret);
 		return -ENODEV;
 	}
 
@@ -226,15 +226,14 @@ static int nrc_hal_probe(struct platform_device *pdev)
 	struct nrc_hif_device *hdev;
 
 	if (!nrc_spi_is_device_available()) {
-		ERR_INIT(
-			"HIF backend module not found. Please load nrc_spi module first.");
+		ERR_HIF("HIF backend module not found. Please load nrc_spi module first.");
 		return -ENODEV;
 	}
 
 	/* Get SPI device information */
 	spi_info = nrc_spi_get_device_info();
 	if (!spi_info) {
-		ERR_INIT("Failed to get SPI device information");
+		ERR_HIF("Failed to get SPI device information");
 		return -ENODEV;
 	}
 
@@ -244,13 +243,13 @@ static int nrc_hal_probe(struct platform_device *pdev)
 		INFO("HIF device found: %s (parent setting disabled for testing)",
 		     dev_name(spi_info->dev));
 	} else {
-		ERR_INIT("HIF device is NULL");
+		ERR_HIF("HIF device is NULL");
 		return -ENODEV;
 	}
 
 	hdev = nrc_hif_alloc(spi_info->dev, spi_info->priv, spi_info->ops);
 	if (IS_ERR(hdev)) {
-		ERR_INIT("Failed to allocate HIF device: %ld", PTR_ERR(hdev));
+		ERR_HIF("Failed to allocate HIF device: %ld", PTR_ERR(hdev));
 		return PTR_ERR(hdev);
 	}
 
@@ -263,7 +262,7 @@ static int nrc_hal_probe(struct platform_device *pdev)
 	/* Initialize HAL components */
 	ret = nrc_hal_callback_init();
 	if (ret) {
-		ERR_INIT("Failed to initialize HAL callback system: %d", ret);
+		ERR_HIF("Failed to initialize HAL callback system: %d", ret);
 		g_nw_from_wlan = NULL;
 		return ret;
 	}
@@ -280,20 +279,20 @@ static int nrc_hal_probe(struct platform_device *pdev)
 	/* Probe and initialize HIF device after platform setup */
 	ret = nrc_hal_probe_hif_device(hdev);
 	if (ret) {
-		ERR_INIT("Failed to probe HIF device: %d", ret);
+		ERR_HIF("Failed to probe HIF device: %d", ret);
 		platform_set_drvdata(pdev, NULL);
 		nrc_hal_hdev_cleanup(hdev);
-		nrc_hif_free();
+		nrc_hif_free(hdev);
 		return ret;
 	}
 
 	/* Initialize hdev workqueues and core resources after HIF probe */
 	ret = nrc_hal_hdev_init(hdev);
 	if (ret) {
-		ERR_INIT("Failed to initialize hdev resources: %d", ret);
+		ERR_HIF("Failed to initialize hdev resources: %d", ret);
 		platform_set_drvdata(pdev, NULL);
 		nrc_hal_hdev_cleanup(hdev);
-		nrc_hif_free();
+		nrc_hif_free(hdev);
 		return ret;
 	}
 
@@ -313,12 +312,13 @@ static int nrc_hal_remove(struct platform_device *pdev)
 {
 	struct nrc_hif_device *hdev = platform_get_drvdata(pdev);
 
-	// DBG_ST("HAL: Platform device remove called\n");
+	// DBG_STATE("HAL: Platform device remove called\n");
 
 	/* Ensure device is awake before cleanup to prevent SPI errors */
 	if (hdev && !NRC_PS_IS_AWAKE(hdev)) {
 		DBG_PS("HAL remove: Device not awake, requesting wake before cleanup");
-		nrc_ps_request_wake_sync(hdev, 2000, NRC_PS_REASON_HAL_SHUTDOWN);
+		nrc_ps_request_wake_sync(hdev, 2000,
+					 NRC_PS_REASON_HAL_SHUTDOWN);
 	}
 
 	/* Clear network device reference */
@@ -333,12 +333,17 @@ static int nrc_hal_remove(struct platform_device *pdev)
 	/* Perform device reset before module cleanup */
 	nrc_hif_ops_reset_device();
 
-	/* Clean up hdev resources and free HIF device */
+	/* Clean up hdev resources and free HIF device
+	 * Note: During this call, hdev is still valid and nrc_hal_core_get_hdev()
+	 * will return the valid hdev pointer. This allows GPIO cleanup to work. */
 	if (hdev) {
 		nrc_hal_hdev_cleanup(hdev);
-		nrc_hif_free();
+		nrc_hif_free(hdev);
 	}
 
+	/* Clear platform driver data AFTER freeing hdev
+	 * This prevents use-after-free by making nrc_hal_core_get_hdev() return NULL
+	 * after all cleanup is complete */
 	platform_set_drvdata(pdev, NULL);
 
 	INFO("NRC HAL platform driver removed\n");
@@ -346,6 +351,22 @@ static int nrc_hal_remove(struct platform_device *pdev)
 	return 0;
 #endif
 }
+
+/* ===========================================================================
+ * Module Parameters
+ * =========================================================================== */
+
+/* Debug level: 0=ERR, 1=WARN, 2=INFO, 3=DBG */
+int debug_level = DEFAULT_NRC_DBG_LEVEL;
+module_param(debug_level, int, 0600);
+MODULE_PARM_DESC(debug_level, "Debug level (0=ERR, 1=WARN, 2=INFO, 3=DBG)");
+
+/* Debug mask: bitmask for categories */
+unsigned long debug_mask = DEFAULT_NRC_DBG_MASK;
+module_param(debug_mask, ulong, 0600);
+MODULE_PARM_DESC(
+	debug_mask,
+	"Debug category mask (BASIC=0x1, HIF=0x2, WIM=0x4, TX=0x8, RX=0x10, MAC=0x20, CAPI=0x40, PS=0x80, STATE=0x100, BD=0x200, FW=0x400, AMPDU=0x800, CREDIT=0x1000, SLOT=0x2000, BUS=0x4000, ALL=0xFFFFFFFF)");
 
 /* Platform device ID table for matching multiple device names */
 static struct platform_device_id hal_device_ids[] = {
@@ -380,15 +401,15 @@ static int __init nrc_core_init(void)
 	/* Register platform driver */
 	ret = platform_driver_register(&nrc_hal_driver);
 	if (ret) {
-		ERR_INIT("Failed to register HAL platform driver: %d", ret);
+		ERR_HIF("Failed to register HAL platform driver: %d", ret);
 		return ret;
 	}
 
 	/* Create platform device to trigger probe */
 	nrc_hal_device = platform_device_register_simple("core", -1, NULL, 0);
 	if (IS_ERR(nrc_hal_device)) {
-		ERR_INIT("Failed to register HAL platform device: %ld",
-			 PTR_ERR(nrc_hal_device));
+		ERR_HIF("Failed to register HAL platform device: %ld",
+			PTR_ERR(nrc_hal_device));
 		platform_driver_unregister(&nrc_hal_driver);
 		return PTR_ERR(nrc_hal_device);
 	}

@@ -51,7 +51,7 @@ int nrc_wim_response_init(struct nrc_hif_device *hdev);
 /**
  * nrc_wim_response_deinit - deinitialize wim response
  */
-int nrc_wim_response_deinit(void);
+int nrc_wim_response_deinit(struct nrc_hif_device *hdev);
 
 /**
  * nrc_wim_skb_add_tlv - append a TLV parameter

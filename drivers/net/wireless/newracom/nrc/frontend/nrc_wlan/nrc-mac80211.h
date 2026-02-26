@@ -77,7 +77,7 @@ void nrc_ampdu_mon_deinit(void);
 void nrc_kick_txq(struct nrc *nw);
 int nrc_handle_frame(struct nrc *nw, struct sk_buff *skb);
 void nrc_mac_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif);
-void nrc_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif);
+bool nrc_cancel_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif);
 void nrc_mac_scan_completed_work_handler(struct work_struct *work);
 void beacon_loss_check_work_handler(struct work_struct *work);
 

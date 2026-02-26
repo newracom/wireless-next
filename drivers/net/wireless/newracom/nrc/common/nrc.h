@@ -270,7 +270,6 @@ struct nrc_vif {
 	/* inactivity */
 	u32 max_idle_period;
 	struct timer_list max_idle_timer;
-	bool max_idle_timer_enabled;
 
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
 	/* P2p client NoA */

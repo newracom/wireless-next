@@ -24,6 +24,9 @@
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
 
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* Common directory headers - Interfaces */
 #include "nrc-hal-core-interface.h"
 
@@ -1434,10 +1437,10 @@ static int nrc_shell_run(struct sk_buff *skb, struct genl_info *info)
 				    cmd);
 
 	if (!strncmp(cmd, "test", strlen("test"))) {
-		DBG_ST("Enable skip_idle_mode for test");
+		DBG_STATE("Enable skip_idle_mode for test");
 		hdev->params->skip_idle_mode = 1;
 	} else if (hdev->params->skip_idle_mode) {
-		DBG_ST("Disable skip_idle_mode");
+		DBG_STATE("Disable skip_idle_mode");
 		hdev->params->skip_idle_mode = 0;
 	}
 

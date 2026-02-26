@@ -277,11 +277,10 @@ static int _c_spi_read_regs(struct spi_device *spi, u8 addr, u8 *buf,
 		if (priv && priv->hdev && !NRC_PS_IS_ASLEEP(priv->hdev) &&
 		    !NRC_PS_IS_SLEEPING(priv->hdev)) {
 			WARN_ON_ONCE(1);
+			ERR_SPI("SPI ACK is invalid (PS state: %s)",
+				NRC_PS_STATE_STR(priv->hdev));
 		}
-		INFO("[%s] try to read register but SPI ACK is invalid (PS state: %s)",
-		     __func__,
-		     (priv && priv->hdev) ? NRC_PS_STATE_STR(priv->hdev) :
-					    "unknown");
+		/* During sleep polling (SLEEPING state), invalid ACK is expected */
 		return -EIO;
 	}
 #endif
@@ -330,12 +329,14 @@ static int _c_spi_write_reg(struct spi_device *spi, u8 addr, u8 data)
 #ifndef CONFIG_SPI_HALF_DUPLEX
 	/* In case of spi reset, skip a process for confirming spi ack */
 	if (C_SPI_WDATA(data) != 0xC8) {
-		if (WARN_ON_ONCE(rx[7] != C_SPI_ACK)) {
-			INFO("[%s] try to read register but SPI ACK is invalid (PS state: %s)",
-			     __func__,
-			     (priv && priv->hdev) ?
-				     NRC_PS_STATE_STR(priv->hdev) :
-				     "unknown");
+		if (rx[7] != C_SPI_ACK) {
+			WARN_ON_ONCE(1);
+			if (priv && priv->hdev) {
+				ERR_SPI("SPI ACK is invalid (PS state: %s)",
+					NRC_PS_STATE_STR(priv->hdev));
+			} else {
+				ERR_SPI("SPI ACK is invalid");
+			}
 			return -EIO;
 		}
 	}
@@ -404,9 +405,9 @@ static ssize_t _c_spi_read(struct spi_device *spi, u8 *buf, ssize_t size)
 	}
 
 #ifndef CONFIG_SPI_HALF_DUPLEX
-	if (WARN_ON_ONCE(rx[7] != C_SPI_ACK)) {
-		INFO("[%s] try to read register but SPI ACK is invalid",
-		     __func__);
+	if (rx[7] != C_SPI_ACK) {
+		WARN_ON_ONCE(1);
+		ERR_SPI("SPI ACK is invalid");
 		status = -EIO;
 		goto error_cleanup;
 	}
@@ -763,7 +764,6 @@ out:
 	trace_nrc_hif_rx_slot(priv, RX_SLOT, "after rx out");
 
 	skb_put(skb, sizeof(*hif) + hif->len);
-	DBG_HIF_RX("rx-irq: len=%d type=%d", skb->len, hif->type);
 	return skb;
 
 fail:
@@ -1293,8 +1293,9 @@ static int spi_process_device_status(struct nrc_hif_device *hdev,
 			 * If we don't enable IRQ here, target keeps retrying ("RETRY EIRQ")
 			 * and never sends the WDT_EXPIRED notification.
 			 */
-			c_spi_enable_irq(spi, false,
-					 CSPI_EIRQ_A_ENABLE); /* cleanup shadow reg */
+			c_spi_enable_irq(
+				spi, false,
+				CSPI_EIRQ_A_ENABLE); /* cleanup shadow reg */
 			c_spi_enable_irq(spi, true, CSPI_EIRQ_A_ENABLE);
 
 			if ((status->msg[3] & 0xFFFF) ==
@@ -1326,13 +1327,27 @@ static int spi_process_device_status(struct nrc_hif_device *hdev,
 DEVICE_READY:
 	/* Device Ready after FW download, WDT Reset, or Deep sleep */
 	if (status->eirq.status & EIRQ_STATUS_DEVICE_READY) {
-		/* Unpark RX thread when device becomes ready (both host and FW initiated wake) */
-		if (priv->kthread && atomic_read(&priv->rx_thread_parked)) {
-			kthread_unpark(priv->kthread);
-			atomic_set(&priv->rx_thread_parked, 0);
-			DBG_PS("RX thread unparked on DEVICE_READY");
-		}
 		target_noti = status->msg[3] & 0xffff;
+
+		/*
+		 * Unpark RX thread when device is fully ready, BUT:
+		 * - Skip for REQUEST_FW_DOWNLOAD (0xDC): Target is in WAKING state,
+		 *   FW download in progress, not ready for normal SPI communication
+		 * - For FW_READY_FROM_PS (0xEC): Device fully awake, ready for operation
+		 * - For FW_READY_FROM_WDT: Device reset complete, ready for operation
+		 */
+		if (target_noti != TARGET_NOTI_REQUEST_FW_DOWNLOAD) {
+			if (priv->kthread &&
+			    atomic_read(&priv->rx_thread_parked)) {
+				kthread_unpark(priv->kthread);
+				atomic_set(&priv->rx_thread_parked, 0);
+				DBG_PS("RX thread unparked on DEVICE_READY (noti=0x%04X)",
+				       target_noti);
+			}
+		} else {
+			DBG_PS("DEVICE_READY with REQUEST_FW_DOWNLOAD (0xDC)");
+		}
+
 		if (nrc_spi_target_noti_to_event(target_noti, &event.type)) {
 			spi_trigger_hal_event(priv, &event, __func__);
 		} else if (target_noti != 0) {
@@ -1344,7 +1359,7 @@ DEVICE_READY:
 		switch (status->msg[3] & 0xffff) {
 		case TARGET_NOTI_BEACON_UPDATED:
 			debug->g_nrc_beacon_updated++;
-			//DBG_ST("TARGET_NOTI_BEACON_UPDATED");
+			//DBG_STATE("TARGET_NOTI_BEACON_UPDATED");
 			break;
 		case TARGET_NOTI_WDT_EXPIRED:
 			/*
@@ -1360,7 +1375,7 @@ DEVICE_READY:
 			break;
 		case TARGET_NOTI_FW_READY_FROM_PS:
 			spi_hif_rx_thread_resume(hdev);
-			DBG_PS("Wake-up by FW_READY_FROM_PS");
+			/* IRQ handler already logged FW_READY_FROM_PS */
 			return 0; /* continue with normal update */
 		case TARGET_NOTI_FAILED_TO_ENTER_PS:
 			DBG_PS("Wake-up by FAILED_TO_ENTER_PS");
@@ -1374,7 +1389,7 @@ DEVICE_READY:
 			 * 4. Forward to frontend for ieee80211_restart_hw
 			 */
 			spi_hif_rx_thread_resume(hdev);
-			DBG_ST("FW ready from WDT - RX thread resumed");
+			DBG_STATE("FW ready from WDT - RX thread resumed");
 			return 0; /* continue with normal update */
 		case TARGET_NOTI_FW_ENTER_TO_PS:
 			/*
@@ -1734,7 +1749,8 @@ void c_spi_enable_irq(struct spi_device *spi, bool enable, u8 mask)
 		for (retry = 0; retry < MAX_ENABLE_IRQ_RETRY; retry++) {
 			ret = c_spi_write_reg(spi, C_SPI_EIRQ_MODE, m);
 			if (ret) {
-				DBG_HIF("enable_irq: mode write retry %d", retry + 1);
+				DBG_HIF("enable_irq: mode write retry %d",
+					retry + 1);
 				mdelay(MAX_ENABLE_IRQ_DELAY);
 				continue;
 			}
@@ -2144,7 +2160,7 @@ void nrc_backend_set_hal_core_refs(struct nrc_hif_device *hdev)
 	/* Synchronize SPI module parameter to nw structure */
 	memcpy(hdev->params->power_save_gpio, power_save_gpio,
 	       sizeof(power_save_gpio));
-	// DBG_ST("HIF device module: Power save GPIO synchronized - [%d, %d, %d]",
+	// DBG_STATE("HIF device module: Power save GPIO synchronized - [%d, %d, %d]",
 	// 		hdev->params->power_save_gpio[0], hdev->params->power_save_gpio[1], hdev->params->power_save_gpio[2]);
 
 	// INFO("SPI module: Core references set - nw=%p hdev=%p", nw, hdev);

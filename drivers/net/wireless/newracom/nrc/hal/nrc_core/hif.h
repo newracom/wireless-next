@@ -34,13 +34,13 @@ struct ieee80211_sta;
 /* HIF Device Management Functions */
 struct nrc_hif_device *nrc_hif_alloc(struct device *dev, void *priv,
 				     struct nrc_hif_ops *ops);
-void nrc_hif_free(void);
+void nrc_hif_free(struct nrc_hif_device *hdev);
 void nrc_hif_reset_slot_credit(void);
 void nrc_hif_free_skb(struct nrc_hif_device *hdev, struct sk_buff *skb);
 
 /* HAL Operations Functions (not direct HIF ops) */
 int nrc_hal_start(void);
-int nrc_hal_stop(void);
+int nrc_hal_stop(struct nrc_hif_device *hdev);
 void nrc_hal_debug_send(struct sk_buff *skb);
 
 /* HIF Queue Management Functions */

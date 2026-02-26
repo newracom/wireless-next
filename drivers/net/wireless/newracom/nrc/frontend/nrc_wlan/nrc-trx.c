@@ -41,6 +41,9 @@
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
 
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* WLAN module trace system (declarations only) */
 #if defined(CONFIG_NRC_TRACING)
 #define CREATE_TRACE_POINTS
@@ -192,13 +195,12 @@ static void nrc_debug_print_frame(struct ieee80211_hdr *hdr,
 			       subtype_str, "TX", addr1, addr2);
 		}
 	} else {
-		/* MGMT/CTL frames use DBG_TX_MAC/DBG_RX_MAC */
 		if (direction) {
-			DBG_RX_MAC("%s %s %s, DA: %pM, SA: %pM", type_str,
-				   subtype_str, "RX", addr1, addr2);
+			DBG(CAT(MAC) | CAT(RX), "%s %s %s, DA: %pM, SA: %pM",
+			    type_str, subtype_str, "RX", addr1, addr2);
 		} else {
-			DBG_TX_MAC("%s %s %s, DA: %pM, SA: %pM", type_str,
-				   subtype_str, "TX", addr1, addr2);
+			DBG(CAT(MAC) | CAT(TX), "%s %s %s, DA: %pM, SA: %pM",
+			    type_str, subtype_str, "TX", addr1, addr2);
 		}
 	}
 }
@@ -719,7 +721,6 @@ static int tx_h_debug_state(struct nrc_trx_data *tx)
 	return 0;
 }
 
-
 static int tx_h_wfa_halow_filter(struct nrc_trx_data *tx)
 {
 	struct nrc *nw = tx->nw;
@@ -731,7 +732,6 @@ static int tx_h_wfa_halow_filter(struct nrc_trx_data *tx)
 
 	return 0;
 }
-
 
 static int tx_h_frame_filter(struct nrc_trx_data *tx)
 {
@@ -754,7 +754,6 @@ static int tx_h_frame_filter(struct nrc_trx_data *tx)
 	}
 	return 0;
 }
-
 
 #ifdef CONFIG_SUPPORT_P2P
 static int tx_h_managed_p2p_intf_addr(struct nrc_trx_data *tx)
@@ -848,7 +847,6 @@ static int tx_h_put_iv(struct nrc_trx_data *tx)
 	return 0;
 }
 
-
 #if defined(CONFIG_CONVERT_NON_QOSDATA)
 static bool ieee80211_is_data_data(__le16 fc)
 {
@@ -941,7 +939,6 @@ static int tx_h_twt_assoc(struct nrc_trx_data *tx)
 done:
 	return 0;
 }
-
 
 /* RX */
 
@@ -1091,7 +1088,6 @@ static int rx_h_vendor(struct nrc_trx_data *rx)
 done:
 	return 0;
 }
-
 
 static void nrc_rx_handler(void *data, u8 *mac, struct ieee80211_vif *vif)
 {
@@ -1273,8 +1269,8 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 					mgmt->bssid, WLAN_REASON_DEAUTH_LEAVING,
 					NULL, false);
 				if (!skb_deauth) {
-					DBG_ST("%s Fail to alloc skb",
-					       __func__);
+					DBG_STATE("%s Fail to alloc skb",
+						  __func__);
 					/* Track FRAME SKB free (RX path from SPI) */
 					NRC_SKB_TRACK_FREE(nw->hdev, skb,
 							   HIF_TYPE_FRAME, true,
@@ -1323,6 +1319,29 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 				eapol_msg, mh->addr1, mh->addr2);
 			/* key exchange and install key */
 			nrc_ps_dyn_start_custom_timeout(nw, 1000);
+		}
+
+		/* During hw_scan, log PROBE_RESP and pass to mac80211.
+		 * Let mac80211/cfg80211 handle BSS registration to maintain
+		 * proper scan session context.
+		 */
+		if (ieee80211_is_probe_resp(fc) &&
+		    (atomic_read(&nw->scan_mode) ==
+			     NRC_SCAN_MODE_ACTIVE_SCANNING ||
+		     atomic_read(&nw->scan_mode) ==
+			     NRC_SCAN_MODE_PASSIVE_SCANNING)) {
+			struct ieee80211_rx_status *rxs =
+				IEEE80211_SKB_RXCB(rx.skb);
+			struct ieee80211_channel *channel;
+
+			/* Get channel for logging */
+			channel =
+				ieee80211_get_channel(nw->hw->wiphy, rxs->freq);
+			if (channel) {
+				DBG_MAC("SCAN: %pM ch=%d freq=%d rssi=%d",
+					mh->addr2, channel->hw_value, rxs->freq,
+					rxs->signal);
+			}
 		}
 
 		/* Track FRAME SKB before passing to mac80211 (ownership transfer) */
@@ -1439,7 +1458,6 @@ static int rx_h_decrypt(struct nrc_trx_data *rx)
 
 	return 0;
 }
-
 
 #if KERNEL_VERSION(4, 6, 0) <= NRC_TARGET_KERNEL_VERSION
 static int rx_h_check_sn(struct nrc_trx_data *rx)
@@ -1558,8 +1576,6 @@ static int rx_h_action(struct nrc_trx_data *rx)
 	return 0;
 }
 
-
-
 static int rx_h_twt_assoc(struct nrc_trx_data *rx)
 {
 	struct nrc *nw = rx->nw;
@@ -1582,8 +1598,6 @@ static int rx_h_twt_assoc(struct nrc_trx_data *rx)
 done:
 	return 0;
 }
-
-
 
 static int rx_h_twt_monitor(struct nrc_trx_data *rx)
 {
@@ -1623,8 +1637,6 @@ static int rx_h_twt_monitor(struct nrc_trx_data *rx)
 done:
 	return 0;
 }
-
-
 
 #if NRC_DBG_PRINT_FRAME_RX
 static int rx_h_debug_print(struct nrc_trx_data *rx)
@@ -2232,39 +2244,41 @@ static int nrc_mac_s1g_monitor_rx(struct nrc *nw, struct sk_buff *skb)
 
 /* TX handlers array */
 const struct nrc_trx_handler nrc_tx_handlers[] = {
-	{ .handler = tx_h_sta_pm, .vif_types = BIT(NL80211_IFTYPE_STATION) },
+	{.handler = tx_h_sta_pm, .vif_types = BIT(NL80211_IFTYPE_STATION)},
 #if NRC_DBG_PRINT_FRAME_TX
-	{ .handler = tx_h_debug_print, .vif_types = NL80211_IFTYPE_ALL },
+	{.handler = tx_h_debug_print, .vif_types = NL80211_IFTYPE_ALL},
 #endif
-	{ .handler = tx_h_debug_state, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = tx_h_wfa_halow_filter, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = tx_h_frame_filter, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = tx_h_managed_p2p_intf_addr, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = tx_h_put_iv, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = tx_h_put_qos_control, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = tx_h_twt_assoc, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = tx_h_bss_max_idle_period, .vif_types = NL80211_IFTYPE_ALL },
+	{.handler = tx_h_debug_state, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = tx_h_wfa_halow_filter, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = tx_h_frame_filter, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = tx_h_managed_p2p_intf_addr,
+	 .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = tx_h_put_iv, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = tx_h_put_qos_control, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = tx_h_twt_assoc, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = tx_h_bss_max_idle_period, .vif_types = NL80211_IFTYPE_ALL},
 };
 const int nrc_tx_handlers_count = ARRAY_SIZE(nrc_tx_handlers);
 
 /* RX handlers array */
 const struct nrc_trx_handler nrc_rx_handlers[] = {
-	{ .handler = rx_h_fixup_ps_poll_sp, .vif_types = BIT(NL80211_IFTYPE_STATION) },
-	{ .handler = rx_h_vendor, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = rx_h_decrypt, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = rx_h_check_sn, .vif_types = NL80211_IFTYPE_ALL },
+	{.handler = rx_h_fixup_ps_poll_sp,
+	 .vif_types = BIT(NL80211_IFTYPE_STATION)},
+	{.handler = rx_h_vendor, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = rx_h_decrypt, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = rx_h_check_sn, .vif_types = NL80211_IFTYPE_ALL},
 #if defined(CONFIG_SUPPORT_IBSS)
-	{ .handler = rx_h_ibss_get_bssid_tsf, .vif_types = NL80211_IFTYPE_ALL },
+	{.handler = rx_h_ibss_get_bssid_tsf, .vif_types = NL80211_IFTYPE_ALL},
 #endif
-	{ .handler = rx_h_action, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = rx_h_twt_assoc, .vif_types = NL80211_IFTYPE_ALL },
-	{ .handler = rx_h_twt_monitor, .vif_types = NL80211_IFTYPE_ALL },
+	{.handler = rx_h_action, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = rx_h_twt_assoc, .vif_types = NL80211_IFTYPE_ALL},
+	{.handler = rx_h_twt_monitor, .vif_types = NL80211_IFTYPE_ALL},
 #if NRC_DBG_PRINT_FRAME_RX
-	{ .handler = rx_h_debug_print, .vif_types = NL80211_IFTYPE_ALL },
+	{.handler = rx_h_debug_print, .vif_types = NL80211_IFTYPE_ALL},
 #endif
 #ifdef CONFIG_SUPPORT_MESH_ROUTING
-	{ .handler = rx_h_mesh, .vif_types = BIT(NL80211_IFTYPE_MESH_POINT) },
+	{.handler = rx_h_mesh, .vif_types = BIT(NL80211_IFTYPE_MESH_POINT)},
 #endif
-	{ .handler = rx_h_bss_max_idle_period, .vif_types = NL80211_IFTYPE_ALL },
+	{.handler = rx_h_bss_max_idle_period, .vif_types = NL80211_IFTYPE_ALL},
 };
 const int nrc_rx_handlers_count = ARRAY_SIZE(nrc_rx_handlers);

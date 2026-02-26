@@ -21,11 +21,19 @@
 
 #include <linux/device.h>
 
+/* Include common debug interface */
+#include "nrc-debug-common.h"
+
 /* Forward declarations */
 struct nrc;
 
 /* Global device pointer */
 extern struct device *g_dev;
+
+/* WLAN-specific debug macros */
+#define INFO_WLAN(fmt, ...) INFo("Wlan", fmt, ##__VA_ARGS__)
+#define WARN_WLAN(fmt, ...) WARn("Wlan", fmt, ##__VA_ARGS__)
+#define ERR_WLAN(fmt, ...) ERR("Wlan", fmt, ##__VA_ARGS__)
 
 /* WLAN Debug Functions */
 void nrc_init_debugfs(struct nrc *nw);

@@ -20,7 +20,7 @@
 #ifndef NRC_LOG_H
 #define NRC_LOG_H
 
-#include "nrc-debug-common.h"
+#include "nrc-debug.h"
 
 /* Legacy log level definitions - for backward compatibility only */
 #define LOG_LEVEL_NONE (0)

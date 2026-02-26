@@ -34,6 +34,9 @@
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
 
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* Common directory headers - Interfaces */
 #include "nrc-hal-core-callback.h"
 #include "nrc-hal-core-interface.h"
@@ -847,7 +850,7 @@ static int nrc_wlan_handle_twt_service(struct nrc_hal_event_data *event)
 		return -EINVAL;
 	}
 
-	DBG_ST("TARGET_NOTI_TWT_SERVICE");
+	DBG_STATE("TARGET_NOTI_TWT_SERVICE");
 	nrc_ps_dyn_start_twt(nw);
 	nw->params->twt_service = true;
 	sysfs_notify(&THIS_MODULE->mkobj.kobj, NULL, "twt_service");
@@ -869,7 +872,7 @@ static int nrc_wlan_handle_twt_quiet(struct nrc_hal_event_data *event)
 		return -EINVAL;
 	}
 
-	DBG_ST("TARGET_NOTI_TWT_QUIET");
+	DBG_STATE("TARGET_NOTI_TWT_QUIET");
 	nw->params->twt_service = false;
 	sysfs_notify(&THIS_MODULE->mkobj.kobj, NULL, "twt_service");
 
@@ -905,14 +908,14 @@ static int nrc_wlan_handle_fw_ready_from_wdt(struct nrc_hal_event_data *event)
 	nrc_vcmd_backup_set_wdt_flag(1);
 	ret = nrc_mac_restart(nw);
 	if (ret == 1) {
-		DBG_ST("Restart hw because target reset by WDT");
+		DBG_STATE("Restart hw because target reset by WDT");
 		ieee80211_restart_hw(nw->hw);
 	}
 
 #if defined(CONFIG_SUPPORT_BD)
 	{
 		struct regulatory_request request;
-		DBG_PS("[%s,L%d] load board data", __func__, __LINE__);
+		DBG_BD("Reload board data after wake");
 		request.alpha2[0] = nw->alpha2[0];
 		request.alpha2[1] = nw->alpha2[1];
 		request.initiator = NL80211_REGDOM_SET_BY_DRIVER;

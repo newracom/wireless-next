@@ -37,6 +37,10 @@
 
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
+
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* SPI module trace system - disabled due to module loading order */
 /* Trace symbols are created by frontend module, but SPI loads first */
 #if defined(CONFIG_NRC_TRACING) && 0
@@ -195,17 +199,22 @@ static int spi_hif_start(struct nrc_hif_device *hdev)
 			goto kill_kthread;
 		}
 	} else if (spi->irq >= 0) {
+#ifdef CONFIG_SPI_USE_DT
+		/* DT provides IRQ trigger configuration */
+		unsigned long irq_flags = IRQF_ONESHOT;
+#else
+		/* Non-DT: specify trigger type explicitly */
+		unsigned long irq_flags = IRQF_TRIGGER_HIGH | IRQF_ONESHOT;
+#endif
 #ifdef CONFIG_SUPPORT_THREADED_IRQ
 		if (!priv->irq_requested) {
 			ret = request_threaded_irq(spi->irq, NULL, spi_irq,
-						   IRQF_TRIGGER_HIGH |
-							   IRQF_ONESHOT,
-						   "nrc-spi-irq", hdev);
+						   irq_flags, "nrc-spi-irq",
+						   hdev);
 		}
 #else
 		if (!priv->irq_requested) {
-			ret = request_irq(spi->irq, spi_irq,
-					  IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
+			ret = request_irq(spi->irq, spi_irq, irq_flags,
 					  "nrc-spi-irq", hdev);
 		}
 #endif
@@ -342,6 +351,7 @@ static int spi_hif_xmit(struct nrc_hif_device *hdev, struct sk_buff *skb)
 	struct nrc_spi_priv *priv = nrc_spi_get_priv();
 
 	int ret, nr_slot = DIV_ROUND_UP(skb->len, hdev->slot[TX_SLOT].size);
+	int avail = 0;
 #ifdef CONFIG_TRX_BACKOFF
 	int backoff;
 #endif
@@ -369,19 +379,6 @@ static int spi_hif_xmit(struct nrc_hif_device *hdev, struct sk_buff *skb)
 
 	trace_nrc_hif_tx_slot(priv, TX_SLOT, "before tx");
 
-	if ((hif->type == HIF_TYPE_FRAME) &&
-	    ((hif->subtype == HIF_FRAME_SUB_DATA_BE) ||
-	     (hif->subtype == HIF_FRAME_SUB_MGMT))) {
-		if (hdev && fh->flags.tx.ac < CREDIT_QUEUE_MAX) {
-			unsigned long flags;
-			CREDIT_LOCK(hdev, flags);
-			hdev->credit.front[fh->flags.tx.ac] += nr_slot;
-			CREDIT_UNLOCK(hdev, flags);
-		} else if (!hdev) {
-			ERR_SPI(" core references not set");
-		}
-	}
-
 #ifdef CONFIG_TRX_BACKOFF
 	if (!hdev->ampdu_supported) {
 		backoff = atomic_inc_return(&priv->trx_backoff);
@@ -401,6 +398,34 @@ static int spi_hif_xmit(struct nrc_hif_device *hdev, struct sk_buff *skb)
 	 * Keep lock scope minimal to avoid blocking other SPI operations.
 	 */
 	SLOT_SYNC_LOCK();
+
+	/* Check available credits to xmit by nr_slot */
+	if ((hif->type == HIF_TYPE_FRAME) &&
+	    ((hif->subtype == HIF_FRAME_SUB_DATA_BE) ||
+	     (hif->subtype == HIF_FRAME_SUB_MGMT))) {
+		u8 ac = fh->flags.tx.ac;
+		if (ac < CREDIT_QUEUE_MAX) {
+			unsigned long flags;
+			u8 f, r, max;
+			int room;
+
+			CREDIT_LOCK(hdev, flags);
+			f = hdev->credit.front[ac];
+			r = hdev->credit.rear[ac];
+			max = hdev->credit.credit_max[ac];
+			CREDIT_UNLOCK(hdev, flags);
+
+			room = (f >= r) ? (f - r) : (255 - r + f);
+			avail = max - room;
+
+			if (avail < nr_slot) {
+				SLOT_SYNC_UNLOCK();
+				DBG_HIF("TX Credit Shortage: ac=%d need=%d avail=%d front=%d rear=%d max=%d",
+					ac, nr_slot, avail, f, r, max);
+				return HIF_TX_FAILED;
+			}
+		}
+	}
 
 	/* Re-validate slot availability inside lock to prevent race condition.
 	 * Multiple threads may pass wait_for_xmit() check simultaneously,
@@ -433,15 +458,28 @@ static int spi_hif_xmit(struct nrc_hif_device *hdev, struct sk_buff *skb)
 		return HIF_TX_FAILED;
 	}
 
+	/*
+	 * Increment credit.front AFTER successful SPI write.
+	 * This prevents credit leak when SPI write fails, as front
+	 * would be permanently advanced without a corresponding
+	 * rear increment from FW.
+	 */
+	if (avail >= nr_slot) {
+		unsigned long flags;
+		CREDIT_LOCK(hdev, flags);
+		hdev->credit.front[fh->flags.tx.ac] += nr_slot;
+		CREDIT_UNLOCK(hdev, flags);
+	}
+
 	SLOT_SYNC_UNLOCK();
 
 	if (fh->flags.tx.ac < CREDIT_QUEUE_MAX) {
-		DBG_HIF_TX("xmit: ac=%d slot=%d(%d/%d) fwpend=%d/%d qlen=%d",
-			   fh->flags.tx.ac, nr_slot, hdev->slot[TX_SLOT].head,
-			   hdev->slot[TX_SLOT].tail,
-			   hdev->credit.front[fh->flags.tx.ac],
-			   hdev->credit.rear[fh->flags.tx.ac],
-			   skb_queue_len(&hdev->queue[0]));
+		DBG_TX("xmit: ac=%d slot=%d(%d/%d) fwpend=%d/%d qlen=%d",
+		       fh->flags.tx.ac, nr_slot, hdev->slot[TX_SLOT].head,
+		       hdev->slot[TX_SLOT].tail,
+		       hdev->credit.front[fh->flags.tx.ac],
+		       hdev->credit.rear[fh->flags.tx.ac],
+		       skb_queue_len(&hdev->queue[0]));
 	}
 	trace_nrc_hif_tx_slot(priv, TX_SLOT, "after tx");
 
@@ -483,7 +521,7 @@ static int spi_hif_wait_for_xmit(struct nrc_hif_device *hdev,
 			kthread_should_stop(),
 		5 * HZ);
 	if (ret == 0) { /* Timeout */
-		DBG_HIF_TX("xmit timeout waiting for slot");
+		DBG(CAT(HIF) | CAT(TX), "xmit timeout waiting for slot");
 		return -1;
 	}
 	if (ret < 0)
@@ -786,9 +824,6 @@ static int spi_hif_ps_status(struct nrc_hif_device *hdev)
 	memset(&status, 0x00, sizeof(status));
 	ret = c_spi_read_regs(spi, C_SPI_EIRQ_MODE, (void *)&status,
 			      sizeof(status));
-	DBG_PS("status=0x%02x mode=0x%02x enable=0x%02x msg=0x%08X",
-	       status.eirq.status, status.eirq.mode, status.eirq.enable,
-	       status.msg[3]);
 	if (ret != 0) { /* ACK Fail, PS has been done already */
 		return 2;
 	}

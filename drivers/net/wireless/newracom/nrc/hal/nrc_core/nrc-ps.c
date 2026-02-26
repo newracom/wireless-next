@@ -25,6 +25,7 @@
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/pm.h>
+#include <linux/types.h>
 
 #include "nrc.h"
 #include "nrc-hif.h"
@@ -144,20 +145,11 @@ int nrc_ps_handle_event(struct nrc_hif_device *hdev,
 	old_state = hdev->ps.state;
 	new_state = old_state; /* Default: no change */
 
-	/* Log only important events, skip routine FW_READY */
-	if (event != NRC_PS_EVT_FW_READY) {
-		DBG_PS("Event: %s in state %s (mode=%s, reason=%d)",
-		       nrc_ps_event_str(event), nrc_ps_state_str(old_state),
-		       nrc_ps_mode_str(event_data->mode), event_data->reason);
-	}
-
 	switch (old_state) {
 	case NRC_PS_STATE_WAKE:
 		if (event == NRC_PS_EVT_SLEEP_REQ) {
 			new_state = NRC_PS_STATE_SLEEPING;
 			hdev->ps.sleeping_start_jiffies = jiffies;
-			DBG_PS("→ Initiating sleep sequence (mode=%s)",
-			       nrc_ps_mode_str(event_data->mode));
 		} else if (event == NRC_PS_EVT_WAKE_REQ) {
 			/* Already awake */
 			DBG_PS("Already awake, ignoring wake request");
@@ -171,23 +163,17 @@ int nrc_ps_handle_event(struct nrc_hif_device *hdev,
 			new_state = NRC_PS_STATE_SLEEP;
 			hdev->ps.mode = event_data->mode;
 			NRC_HIF_SET_DRV_STATE(hdev, NRC_DRV_PS);
-			DBG_PS("→ Sleep confirmed (mode=%s)%s",
-			       nrc_ps_mode_str(event_data->mode),
-			       hdev->ps.wake_pending ? " [wake_pending]" : "");
 		} else if (event == NRC_PS_EVT_SLEEP_FAIL ||
 			   event == NRC_PS_EVT_TIMEOUT) {
 			new_state = NRC_PS_STATE_WAKE;
 			hdev->ps.mode = NRC_PS_NONE;
 			hdev->ps.wake_pending = false;
-			ERR_PS("Sleep failed (%s), reverting to WAKE",
-			       event == NRC_PS_EVT_TIMEOUT ? "timeout" :
-							     "failure");
 			ret = (event == NRC_PS_EVT_TIMEOUT) ? -ETIMEDOUT : -EIO;
 		} else if (event == NRC_PS_EVT_WAKE_REQ) {
 			/* TX data arrived during sleep transition - set pending flag */
 			hdev->ps.wake_pending = true;
-			DBG_PS("→ Wake requested during SLEEPING - will wake immediately after sleep done (reason=%d)",
-			       event_data->reason);
+			DBG_PS("Wake requested during SLEEPING - will wake after sleep done (reason=%s)",
+			       nrc_ps_reason_str(event_data->reason));
 		}
 		break;
 
@@ -195,15 +181,12 @@ int nrc_ps_handle_event(struct nrc_hif_device *hdev,
 		if (event == NRC_PS_EVT_WAKE_REQ) {
 			new_state = NRC_PS_STATE_WAKING;
 			hdev->ps.wake_pending = true;
-			DBG_PS("→ Initiating wake sequence (reason=%d)",
-			       event_data->reason);
 		} else if (event == NRC_PS_EVT_FW_READY) {
 			/* Target woke up spontaneously (e.g., beacon, data) */
 			new_state = NRC_PS_STATE_WAKE;
 			hdev->ps.mode = NRC_PS_NONE;
 			hdev->ps.wake_pending = false;
 			NRC_HIF_SET_DRV_STATE(hdev, NRC_DRV_RUNNING);
-			DBG_PS("→ Spontaneous wake from target (TIM/beacon)");
 		} else if (event == NRC_PS_EVT_SLEEP_REQ) {
 			/* Already asleep */
 			DBG_PS("Already asleep, ignoring sleep request");
@@ -239,8 +222,12 @@ int nrc_ps_handle_event(struct nrc_hif_device *hdev,
 
 	if (new_state != old_state) {
 		hdev->ps.state = new_state;
-		DBG_PS("State: %s -> %s", nrc_ps_state_str(old_state),
-		       nrc_ps_state_str(new_state));
+		/* Unified state transition log with event, mode, and reason */
+		DBG_PS("%s: %s → %s (mode=%s, reason=%s)",
+		       nrc_ps_event_str(event), nrc_ps_state_str(old_state),
+		       nrc_ps_state_str(new_state),
+		       nrc_ps_mode_str(event_data->mode),
+		       nrc_ps_reason_str(event_data->reason));
 
 #if defined(ANDROID) && defined(CONFIG_PM_SLEEP)
 		/* Android PM control on state transitions */
@@ -294,14 +281,26 @@ int nrc_ps_request_wake(struct nrc_hif_device *hdev, enum NRC_PS_REASON reason)
 	/* If state transitioned to WAKING, toggle GPIO to wake device */
 	if (ret == 0) {
 		/*
-		 * Note: No need to call nrc_hif_ops_rx_thread_resume() here
-		 * SPI IRQ handler will automatically unpark RX thread when
-		 * FW_READY_FROM_PS interrupt (0xEC) is received
+		 * Skip GPIO toggle for passive wake (TARGET_FW_READY)
+		 * In passive wake, FW initiates wake itself and sends IRQ 0xDC
+		 * GPIO toggle is only needed for active wake (host-initiated)
 		 */
-		DBG_PS("Toggling wakeup pin to wake device from deep sleep");
-		wakeup_gpio = NRC_PARAM_POWER_SAVE_GPIO(hdev, 0);
-		active_high = NRC_PARAM_POWER_SAVE_GPIO(hdev, 2);
-		nrc_hif_ops_gpio_set(wakeup_gpio, active_high ? 1 : 0);
+		if (reason == NRC_PS_REASON_TARGET_FW_READY) {
+			DBG_PS("Passive wake detected, skipping GPIO toggle (FW already waking)");
+		} else {
+			/*
+			 * Note: No need to call nrc_hif_ops_rx_thread_resume() here
+			 * SPI IRQ handler will automatically unpark RX thread when
+			 * FW_READY_FROM_PS interrupt (0xEC) is received
+			 */
+			int active_value;
+			wakeup_gpio = NRC_PARAM_POWER_SAVE_GPIO(hdev, 0);
+			active_high = NRC_PARAM_POWER_SAVE_GPIO(hdev, 2);
+			active_value = active_high ? 1 : 0;
+			DBG_PS("Wakeup GPIO %d → %d (wake)", wakeup_gpio,
+			       active_value);
+			nrc_hif_ops_gpio_set(wakeup_gpio, active_value);
+		}
 	} else if (ret == 1) {
 		DBG_PS("Already waking/awake, skip GPIO toggle (async, reason=%d)",
 		       reason);
@@ -400,14 +399,7 @@ void nrc_ps_handle_fw_ready(void)
 	/* Signal completion for synchronous waiters */
 	complete_all(&hdev->wake_done);
 
-	DBG_PS(">>> WAKE DONE >>> reason=%s WLAN(q0=%d,q1=%d) MCP(q0=%d,q1=%d)",
-	       nrc_ps_reason_str(hdev->ps.pending_wake_reason ?
-					 hdev->ps.pending_wake_reason :
-					 NRC_PS_REASON_TARGET_FW_READY),
-	       NRC_FRAME_QUEUE_LEN(hdev), NRC_WIM_QUEUE_LEN(hdev),
-	       NRC_MCP_FRAME_QUEUE_LEN(hdev), NRC_MCP_WIM_QUEUE_LEN(hdev));
-
-	/* Clear pending wake reason after logging */
+	/* Clear pending wake reason */
 	hdev->ps.pending_wake_reason = 0;
 
 	/* Process queued HAL frames - both WLAN and MCP */
@@ -478,21 +470,22 @@ int nrc_hal_ps_request_sleep(enum NRC_PS_MODE mode, u64 timeout,
 	}
 
 	/* Flush workqueue before GPIO setting and WIM transmission */
-	nrc_tx_flush_wq();
+	nrc_tx_flush_wq(hdev);
 
 	/* Set wakeup pin for deep sleep modes (before WIM command) */
 	if (mode >= NRC_PS_DEEPSLEEP_TIM) {
-		DBG_PS("Setting wakeup pin to inactive state for deep sleep");
+		int inactive_value;
 		wakeup_gpio = NRC_PARAM_POWER_SAVE_GPIO(hdev, 0);
 		active_high = NRC_PARAM_POWER_SAVE_GPIO(hdev, 2);
-		nrc_hif_ops_gpio_set(wakeup_gpio, active_high ? 0 : 1);
+		inactive_value = active_high ? 0 : 1;
+		DBG_PS("Wakeup GPIO %d → %d (sleep)", wakeup_gpio,
+		       inactive_value);
+		nrc_hif_ops_gpio_set(wakeup_gpio, inactive_value);
 	}
 
 	/* Send WIM PS command with polling verification */
 	ret = nrc_wim_set_ps_sync(hdev, mode, timeout, wowlan);
 	if (ret < 0) {
-		ERR_PS("Failed nrc_wim_set_ps_sync: %d", ret);
-
 		/* Update state machine: sleep failed */
 		event_data.event = NRC_PS_EVT_SLEEP_FAIL;
 		nrc_ps_handle_event(hdev, &event_data);
@@ -522,10 +515,6 @@ int nrc_hal_ps_request_sleep(enum NRC_PS_MODE mode, u64 timeout,
 	/* Record sleep event for debugfs monitoring */
 	nrc_ps_record_event(hdev, true, reason, timeout);
 
-	DBG_PS("<<< SLEEP COMPLETE <<< state=%s mode=%s wake_pending=%d",
-	       nrc_ps_state_str(hdev->ps.state), nrc_ps_mode_str(hdev->ps.mode),
-	       hdev->ps.wake_pending);
-
 	/* Check if wake was requested during sleep transition */
 	if (hdev->ps.wake_pending) {
 		DBG_PS("Wake pending after sleep - triggering immediate wake");
@@ -553,7 +542,7 @@ int nrc_hal_ps_request_wake(int timeout_ms, enum NRC_PS_REASON reason)
 	if (!hdev)
 		return -ENODEV;
 
-	DBG_PS("Wake Request: timeout=%d reason=%d", timeout_ms, reason);
+	/* WLAN frontend already logged wake request with reason text */
 
 	/* Store wake reason for later use in wake_target_done */
 	hdev->ps.pending_wake_reason = reason;

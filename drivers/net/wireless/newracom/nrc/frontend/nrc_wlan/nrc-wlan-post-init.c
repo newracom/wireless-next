@@ -158,12 +158,7 @@ int nrc_wlan_post_hal_init(bool restart)
 	/* Wake up queues */
 	ieee80211_wake_queues(nw->hw);
 
-	if (hdev->params->idle_mode) {
-		INFO("idle mode after start");
-		nrc_idle_mode_set_state(nw, true);
-		nrc_ps_set_mode(nw, NRC_PS_DEEPSLEEP_NONTIM, -1, NULL, 
-				NRC_PS_REASON_DRV_POST_INIT);
-	}
+	/* Idle mode will be started in nrc_mac_start() when interface is brought up */
 
 	// dev_debug(nw->dev, "WLAN: Post-HAL initialization complete\n");
 	return 0;
@@ -226,12 +221,14 @@ void nrc_wlan_post_hal_cleanup(bool restart)
 	tasklet_kill(&nw->tx_tasklet);
 #endif
 
-	/* Cleanup synchronization primitives */
-	mutex_destroy(&nw->state_mtx);
-
 	if (!restart) {
 		nrc_unregister_hw(nw);
 	}
+
+	/* Cleanup synchronization primitives after unregistering hardware
+	 * to ensure nrc_mac_stop (called by ieee80211_unregister_hw) can
+	 * still use the mutex before it's destroyed */
+	mutex_destroy(&nw->state_mtx);
 
 	/* Power save GPIO cleanup is now handled in SPI stop function */
 }

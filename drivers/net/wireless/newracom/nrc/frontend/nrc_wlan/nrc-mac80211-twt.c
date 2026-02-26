@@ -33,6 +33,9 @@
 /* Common directory headers - Debug & Trace */
 #include "nrc-debug-common.h"
 
+/* Local module headers - Debug */
+#include "nrc-debug.h"
+
 /* Common directory headers - Interfaces */
 #include "nrc-vendor.h"
 
@@ -142,50 +145,48 @@ static void twt_setup_dump(struct nrc *nw, struct ieee80211_twt_setup *twt)
 	if (!test_bit(TWT_DEBUG_IE_FLAG, &twt_sched->debug_flags))
 		return;
 
-	DBG_ST( "\n======================================");
-	DBG_ST( "TWT DUMP");
-	DBG_ST( "--------------------------------------");
+	DBG_STATE("\n======================================");
+	DBG_STATE("TWT DUMP");
+	DBG_STATE("--------------------------------------");
 
 	/* Dump Request Type, 2 Octets */
-	DBG_ST( "%-10s : %-10s", "TYPE",
-		 (req_type & IEEE80211_TWT_REQTYPE_REQUEST) ? "REQUEST" :
-							      "RESPONSE");
+	DBG_STATE("%-10s : %-10s", "TYPE",
+		  (req_type & IEEE80211_TWT_REQTYPE_REQUEST) ? "REQUEST" :
+							       "RESPONSE");
 
 	cmd = FIELD_GET(IEEE80211_TWT_REQTYPE_SETUP_CMD, req_type);
-	DBG_ST( "%-10s : %-10s", "CMD", setup_cmd_to_str[cmd]);
+	DBG_STATE("%-10s : %-10s", "CMD", setup_cmd_to_str[cmd]);
 
-	DBG_ST( "%-10s : %-10s", "OP",
-		 (req_type & IEEE80211_TWT_REQTYPE_IMPLICIT) ? "IMPLICIT" :
-							       "EXPLICIT");
+	DBG_STATE("%-10s : %-10s", "OP",
+		  (req_type & IEEE80211_TWT_REQTYPE_IMPLICIT) ? "IMPLICIT" :
+								"EXPLICIT");
 
-	DBG_ST( "%-10s : %-10s", "FLOW TYPE",
-		 (req_type & IEEE80211_TWT_REQTYPE_FLOWTYPE) ? "UNANNOUNCE" :
-							       "ANNOUNCE");
+	DBG_STATE("%-10s : %-10s", "FLOW TYPE",
+		  (req_type & IEEE80211_TWT_REQTYPE_FLOWTYPE) ? "UNANNOUNCE" :
+								"ANNOUNCE");
 	flowid = FIELD_GET(IEEE80211_TWT_REQTYPE_FLOWID, req_type);
-	DBG_ST( "%-10s : %-10d", "FLOW ID", flowid);
+	DBG_STATE("%-10s : %-10d", "FLOW ID", flowid);
 
 	exp = FIELD_GET(IEEE80211_TWT_REQTYPE_WAKE_INT_EXP, req_type);
-	DBG_ST( "%-10s : %-10d", "EXP", exp);
+	DBG_STATE("%-10s : %-10d", "EXP", exp);
 
-	DBG_ST( "%-10s : %-10s", "PROTECT",
-		 (req_type & IEEE80211_TWT_REQTYPE_PROTECTION) ? "PROTECTED" :
-								 "UNPROTECTED");
+	DBG_STATE("%-10s : %-10s", "PROTECT",
+		  (req_type & IEEE80211_TWT_REQTYPE_PROTECTION) ?
+			  "PROTECTED" :
+			  "UNPROTECTED");
 
 	/* Dump Params */
-	DBG_ST( "%-10s : %-10llu", "WAKE TIME",
-		 le64_to_cpu(twt_agrt->twt));
-	DBG_ST( "%-10s : %-10u", "DURATION", twt_agrt->min_twt_dur);
-	DBG_ST( "%-10s : %-10d", "MANTISSA",
-		 le16_to_cpu(twt_agrt->mantissa));
+	DBG_STATE("%-10s : %-10llu", "WAKE TIME", le64_to_cpu(twt_agrt->twt));
+	DBG_STATE("%-10s : %-10u", "DURATION", twt_agrt->min_twt_dur);
+	DBG_STATE("%-10s : %-10d", "MANTISSA", le16_to_cpu(twt_agrt->mantissa));
 
-	DBG_ST( "--------------------------------------");
+	DBG_STATE("--------------------------------------");
 	interval = (u64)le16_to_cpu(twt_agrt->mantissa) << exp;
-	DBG_ST( "%-10s : %llu usec, %llu TU", "INTERVAL", interval,
-		 interval >> 10);
+	DBG_STATE("%-10s : %llu usec, %llu TU", "INTERVAL", interval,
+		  interval >> 10);
 	duration = twt_agrt->min_twt_dur << 8;
-	DBG_ST( "%-10s : %d usec, %d TU", "SP", duration,
-		 duration >> 10);
-	DBG_ST( "--------------------------------------");
+	DBG_STATE("%-10s : %d usec, %d TU", "SP", duration, duration >> 10);
+	DBG_STATE("--------------------------------------");
 }
 
 void nrc_mac_tx_twt_setup(struct nrc *nw, struct ieee80211_sta *sta,
@@ -298,7 +299,7 @@ void nrc_mac_rx_twt_teardown(struct nrc *nw, struct ieee80211_sta *sta,
 	}
 
 	if (test_bit(TWT_DEBUG_IE_FLAG, &twt_sched->debug_flags))
-		DBG_ST( "TWT teardown Flowid : %u", flowid);
+		DBG_STATE("TWT teardown Flowid : %u", flowid);
 
 	if (nw->twt_responder) {
 		nrc_mac_twt_teardown_request(nw->hw, sta, flowid);
@@ -340,7 +341,7 @@ void nrc_mac_rx_twt_setup_assoc_req(struct nrc *nw, struct ieee80211_sta *sta,
 	twt_ie = (void *)elem->data;
 #endif
 
-	DBG_ST( "TWT IE FOUND in Assoc Req");
+	DBG_STATE("TWT IE FOUND in Assoc Req");
 
 	twt = (struct ieee80211_twt_setup
 		       *)((u8 *)twt_ie -
@@ -394,7 +395,7 @@ void nrc_mac_rx_twt_setup_assoc_resp(struct nrc *nw, struct ieee80211_sta *sta,
 
 	ret = twt_setup_assoc_info_restore(nw, sta, &twt_ie);
 	if (ret == 0) {
-		DBG_ST( "TWT IE Set in Assoc Resp");
+		DBG_STATE("TWT IE Set in Assoc Resp");
 		assoc_ie = ieee80211_append_ie(
 			skb, WLAN_EID_S1G_TWT,
 			sizeof(struct ieee80211_twt_setup_assoc_ie));
@@ -432,8 +433,7 @@ static int nrc_mac_check_twt_req(struct ieee80211_twt_setup *twt)
 
 	interval = (u64)mantissa << exp;
 	if (interval < duration) {
-		DBG_MAC(
-			"Sleep interval must be longer than service duration(int:%llu, dur:%llu)\n",
+		DBG_MAC("Sleep interval must be longer than service duration(int:%llu, dur:%llu)\n",
 			interval, duration);
 		return -EOPNOTSUPP;
 	}
@@ -456,19 +456,19 @@ static int nrc_mac_twt_flow_get(struct nrc *nw, struct nrc_sta *i_sta,
 	int ret = -1;
 
 	if (flowid > NRC_MAX_STA_TWT_AGRT - 1) {
-		ERR_WLAN("Exceed TWT flow id (%u), max num: %u",
-			flowid, NRC_MAX_STA_TWT_AGRT);
+		ERR_WLAN("Exceed TWT flow id (%u), max num: %u", flowid,
+			 NRC_MAX_STA_TWT_AGRT);
 		goto done; /* reject */
 	}
 
 	f = &i_sta->twt.flow[flowid];
 
 	if ((i_sta->twt.flowid_mask & BIT(flowid))) {
-		DBG_ST( "TWT flow id (%u) exist\n", flowid);
+		DBG_STATE("TWT flow id (%u) exist\n", flowid);
 
 		if (f->duration == duration && f->mantissa == mantissa &&
 		    f->exp == exp) {
-			DBG_ST( "Same TWT Param");
+			DBG_STATE("Same TWT Param");
 			goto done; /* same accept */
 		}
 
@@ -484,9 +484,8 @@ static int nrc_mac_twt_flow_get(struct nrc *nw, struct nrc_sta *i_sta,
 
 	interval = (u64)(mantissa) << exp;
 
-	DBG_ST(
-		 "Flowid:%u Duration:%u, Interval:(man:%u, exp:%u = %llu)",
-		 flowid, duration, mantissa, exp, interval);
+	DBG_STATE("Flowid:%u Duration:%u, Interval:(man:%u, exp:%u = %llu)",
+		  flowid, duration, mantissa, exp, interval);
 
 	ret = 0; /* accept */
 done:
@@ -507,7 +506,7 @@ void nrc_mac_add_twt_setup(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
 
 	int ret = 0;
 
-	DBG_ST( "TWT Setup from %pM (%d)\n", sta->addr, sta->aid);
+	DBG_STATE("TWT Setup from %pM (%d)\n", sta->addr, sta->aid);
 
 	if (nrc_mac_check_twt_req(twt))
 		goto out;
@@ -527,13 +526,13 @@ void nrc_mac_add_twt_setup(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
 
 	switch (ret) {
 	case 0:
-		DBG_ST( "TWT ACCEPT");
+		DBG_STATE("TWT ACCEPT");
 		ret_setup_cmd = TWT_SETUP_CMD_ACCEPT;
 
 		twt_agrt->twt = cpu_to_le64(flow->twt);
 		break;
 	case 1:
-		DBG_ST( "TWT DICTATE");
+		DBG_STATE("TWT DICTATE");
 		ret_setup_cmd = TWT_SETUP_CMD_DICTATE;
 
 		twt_agrt->mantissa = cpu_to_le16(flow->mantissa);
@@ -544,11 +543,11 @@ void nrc_mac_add_twt_setup(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
 
 		break;
 	case -1:
-		DBG_ST( "TWT REJECT");
+		DBG_STATE("TWT REJECT");
 		ret_setup_cmd = TWT_SETUP_CMD_REJECT;
 		break;
 	default:
-		DBG_ST( "TWT REJECT");
+		DBG_STATE("TWT REJECT");
 		ret_setup_cmd = TWT_SETUP_CMD_REJECT;
 		break;
 	}
@@ -565,7 +564,7 @@ void nrc_mac_twt_teardown_request(struct ieee80211_hw *hw,
 	struct nrc *nw = hw->priv;
 	struct nrc_sta *i_sta = to_i_sta(sta);
 
-	DBG_ST( "TWT Teardown from %pM (%d)\n", sta->addr, sta->aid);
+	DBG_STATE("TWT Teardown from %pM (%d)\n", sta->addr, sta->aid);
 	nrc_twt_sched_entry_del(nw, i_sta, flowid);
 }
 
@@ -657,7 +656,7 @@ done:
 static ssize_t nrc_mac_twt_info_write(struct file *file, const char __user *buf,
 				      size_t len, loff_t *ppos)
 {
-	DBG_ST("%s:%d", __FUNCTION__, __LINE__);
+	DBG_STATE("%s:%d", __FUNCTION__, __LINE__);
 	return len;
 }
 
@@ -729,7 +728,7 @@ static ssize_t nrc_mac_twt_schedule_write(struct file *file,
 					  const char __user *buf, size_t len,
 					  loff_t *ppos)
 {
-	DBG_ST("%s:%d", __FUNCTION__, __LINE__);
+	DBG_STATE("%s:%d", __FUNCTION__, __LINE__);
 	return len;
 }
 
@@ -769,7 +768,7 @@ done:
 static ssize_t nrc_mac_twt_dump_write(struct file *file, const char __user *buf,
 				      size_t len, loff_t *ppos)
 {
-	DBG_ST("%s:%d", __FUNCTION__, __LINE__);
+	DBG_STATE("%s:%d", __FUNCTION__, __LINE__);
 	return len;
 }
 
@@ -809,7 +808,7 @@ done:
 static ssize_t nrc_mac_twt_mon_write(struct file *file, const char __user *buf,
 				     size_t len, loff_t *ppos)
 {
-	DBG_ST("%s:%d", __FUNCTION__, __LINE__);
+	DBG_STATE("%s:%d", __FUNCTION__, __LINE__);
 	return len;
 }
 

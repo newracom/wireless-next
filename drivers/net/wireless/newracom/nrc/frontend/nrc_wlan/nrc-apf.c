@@ -33,7 +33,7 @@ static int nrc_apf_wake_target(struct nrc *nw)
 	int ret = 0;
 
 	if (NRC_DRV_IS_ASLEEP(nw->hdev)) {
-		DBG_ST("Wake target for APF");
+		DBG_STATE("Wake target for APF");
 		ret = nrc_ps_set_mode(nw, NRC_PS_NONE, 2000, NULL,
 				      NRC_PS_REASON_DRV_APF_CONFIG);
 		if (ret == -1) {
@@ -127,7 +127,7 @@ int nrc_apf_set_packet_filter(struct nrc *nw, u8 *program, size_t len)
 
 	if (len > max_len) {
 		ERR_WLAN("The length value(%zu) exceeds the filter size(%d)",
-			len, max_len);
+			 len, max_len);
 		return -EMSGSIZE;
 	}
 
@@ -150,7 +150,7 @@ int nrc_apf_read_packet_filter(struct nrc *nw, u32 src_offset, u8 *host_dst,
 	remain = len;
 	offset = 0;
 
-	DBG_ST("APF read (offset: %u, len: %u)", src_offset, len);
+	DBG_STATE("APF read (offset: %u, len: %u)", src_offset, len);
 
 	if (!nrc_apf_is_supported(nw)) {
 		return -EOPNOTSUPP;
@@ -160,12 +160,12 @@ int nrc_apf_read_packet_filter(struct nrc *nw, u32 src_offset, u8 *host_dst,
 
 	if (src_offset >= max_len) {
 		ERR_WLAN("The offset value(%u) exceeds the filter size(%u)",
-			src_offset, max_len);
+			 src_offset, max_len);
 		return -EINVAL;
 	}
 
 	len = min_t(int, max_len - src_offset, len);
-	DBG_ST("Real read len: %u", len);
+	DBG_STATE("Real read len: %u", len);
 	remain = len;
 
 	while (remain) {
@@ -236,7 +236,7 @@ static ssize_t nrc_apf_cap_version_write(struct file *file,
 					 const char __user *buf, size_t len,
 					 loff_t *ppos)
 {
-	DBG_ST("%s:%d", __FUNCTION__, __LINE__);
+	DBG_STATE("%s:%d", __FUNCTION__, __LINE__);
 	return len;
 }
 
@@ -295,7 +295,7 @@ static ssize_t nrc_apf_cap_maxlen_write(struct file *file,
 					const char __user *buf, size_t len,
 					loff_t *ppos)
 {
-	DBG_ST("%s:%d", __FUNCTION__, __LINE__);
+	DBG_STATE("%s:%d", __FUNCTION__, __LINE__);
 	return len;
 }
 
@@ -310,7 +310,7 @@ static ssize_t nrc_apf_set_packet_filter_read(struct file *file,
 					      char __user *user_buf,
 					      size_t count, loff_t *ppos)
 {
-	DBG_ST("%s:%d", __FUNCTION__, __LINE__);
+	DBG_STATE("%s:%d", __FUNCTION__, __LINE__);
 	return 0;
 }
 
@@ -443,8 +443,8 @@ static ssize_t nrc_apf_read_packet_filter_write(struct file *file,
 		return -EINVAL;
 	}
 
-	DBG_ST("APF read (offset: %u, len: %u)", apf_read_offset,
-		 apf_read_len);
+	DBG_STATE("APF read (offset: %u, len: %u)", apf_read_offset,
+		  apf_read_len);
 
 	return count;
 }
@@ -463,7 +463,7 @@ static int nrc_apf_enable_read(void *data, u64 *val)
 	int ret;
 	int enable;
 
-	DBG_ST("APF enable read");
+	DBG_STATE("APF enable read");
 
 	ret = nrc_apf_wake_target(nw);
 	if (ret)
@@ -487,7 +487,7 @@ static int nrc_apf_enable_write(void *data, u64 val)
 	struct nrc *nw = data;
 	int ret;
 
-	DBG_ST("APF enable write (%llu)", val);
+	DBG_STATE("APF enable write (%llu)", val);
 
 	ret = nrc_apf_wake_target(nw);
 	if (ret)

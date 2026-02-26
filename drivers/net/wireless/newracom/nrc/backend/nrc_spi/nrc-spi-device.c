@@ -26,6 +26,7 @@
 #include "nrc-backend-hif-interface.h"
 
 /* Local module headers */
+#include "nrc-debug.h"
 #include "nrc-spi-device.h"
 #include "nrc-hif-cspi.h"
 

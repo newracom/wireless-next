@@ -50,7 +50,6 @@
 #ifndef CONFIG_SPI_USE_DT
 struct spi_device *nrc_create_spi_device(void);
 #endif
-void nrc_dbg_init(struct device *dev);
 
 #ifndef CONFIG_SPI_USE_DT
 static struct spi_device *g_spi_dev;
@@ -283,7 +282,7 @@ static int __init nrc_cspi_init(void)
 #endif
 	int ret = 0;
 
-	// DBG_ST("NRC SPI module initializing...");
+	// DBG_STATE("NRC SPI module initializing...");
 
 	/* Initialize SPI parameters */
 	nrc_spi_params_init();
@@ -304,7 +303,7 @@ static int __init nrc_cspi_init(void)
 		goto unregister_device;
 	}
 
-	// DBG_ST("NRC SPI driver registered successfully (%s)", nrc_cspi_driver.driver.name);
+	// DBG_STATE("NRC SPI driver registered successfully (%s)", nrc_cspi_driver.driver.name);
 	return ret;
 
 unregister_device:

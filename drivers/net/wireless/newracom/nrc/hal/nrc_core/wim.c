@@ -74,16 +74,18 @@ struct sk_buff *nrc_wim_alloc_skb(u16 cmd, int size)
 		ERR_WIM("Failed to allocate SKB for WIM cmd %d(%s), size=%d",
 			cmd, nrc_wim_cmd_str(cmd),
 			size + (int)sizeof(struct hif) +
-				(int)sizeof(struct wim));
+			(int)sizeof(struct wim));
 		return NULL;
 	}
+
+	/* Initialize SKB control block for driver-allocated SKBs */
+	NRC_SKB_CB_INIT(skb);
 
 	/* Track WIM SKB allocation - will be freed by TX thread */
 	if (cmd == WIM_CMD_REQ_FW)
 		NRC_SKB_TRACK_ALLOC(hdev, skb, HIF_TYPE_ND_WIM, false, false);
-	else {
+	else
 		NRC_SKB_TRACK_ALLOC(hdev, skb, HIF_TYPE_WIM, false, false);
-	}
 
 	/* Reserve room for HIF header (will be added during enqueue) */
 	skb_reserve(skb, sizeof(struct hif));
@@ -201,10 +203,13 @@ static int wim_enqueue_to_tx(struct nrc_hif_device *hdev, struct sk_buff *skb,
 		       16, 1, skb->data, skb->len, false);
 #endif
 
-	if (NRC_HIF_DRV_STATE(hdev) == NRC_DRV_REBOOT) {
-		ERR_HIF("%s: Driver rebooting, ignore WIM cmd %d(%s)",
-			use_mcp_path ? "MCP" : "WLAN", cmd,
-			nrc_wim_cmd_str(cmd));
+	/* Check driver state - prevent WIM commands during shutdown/reboot/closing */
+	if (NRC_HIF_DRV_STATE(hdev) == NRC_DRV_REBOOT ||
+	    NRC_HIF_DRV_STATE(hdev) == NRC_DRV_CLOSING ||
+	    NRC_HIF_DRV_STATE(hdev) == NRC_DRV_CLOSED) {
+		ERR_HIF("%s: Driver in invalid state %s, ignore WIM cmd %d(%s)",
+			use_mcp_path ? "MCP" : "WLAN", NRC_DRV_STATE_STR(hdev),
+			cmd, nrc_wim_cmd_str(cmd));
 		nrc_dump_wim(skb);
 		/* SKB has HIF header now, use nrc_hif_free_skb() */
 		nrc_hif_free_skb(hdev, skb);
@@ -438,7 +443,7 @@ int nrc_wim_response_init(struct nrc_hif_device *hdev)
 
 	if (hdev->wim_resp) {
 		ERR_WIM("WIM response already exists, cleaning up first");
-		nrc_wim_response_deinit();
+		nrc_wim_response_deinit(hdev);
 	}
 
 	hdev->wim_resp =
@@ -457,9 +462,8 @@ int nrc_wim_response_init(struct nrc_hif_device *hdev)
 	return 0;
 }
 
-int nrc_wim_response_deinit(void)
+int nrc_wim_response_deinit(struct nrc_hif_device *hdev)
 {
-	struct nrc_hif_device *hdev = nrc_hal_core_get_hdev();
 	int i;
 
 	if (!hdev) {
@@ -618,6 +622,10 @@ int nrc_wim_set_ps(struct nrc_hif_device *hdev, enum NRC_PS_MODE mode,
 	p->ps_wakeup_high = NRC_PARAM_POWER_SAVE_GPIO(hdev, 2);
 	p->ps_duration = timeout;
 
+	DBG_PS("WIM PS config: mode=%d(%s) enable=%d duration=%llu pin=%d active_high=%d",
+	       p->ps_mode, nrc_ps_mode_str(mode), p->ps_enable, p->ps_duration,
+	       p->ps_wakeup_pin, p->ps_wakeup_high);
+
 	if (wowlan) {
 		p->wowlan_wakeup_host_pin = TARGET_GPIO_FOR_WAKEUP_HOST;
 		p->wowlan_enable_any = wowlan->any;
@@ -659,6 +667,7 @@ int nrc_wim_set_ps_sync(struct nrc_hif_device *hdev, enum NRC_PS_MODE mode,
 			       wim_ret, i + 1, NUM_WIM_SEND);
 			goto done;
 		}
+		DBG_PS("Polling sleep status (try %d/%d)...", i + 1, NUM_WIM_SEND);
 		for (j = 0; j < NUM_PS_CHECK; j++) {
 #ifdef ISSUE /* scheduler stall issue */
 			msleep(NUM_PS_WAIT);
@@ -673,6 +682,8 @@ int nrc_wim_set_ps_sync(struct nrc_hif_device *hdev, enum NRC_PS_MODE mode,
 					ERR_PS("FW reset detected during PS operation");
 					ret = 1;
 				}
+				DBG_PS("Sleep confirmed (polled %d times, result=%d)",
+				       j + 1, done_ps);
 				goto done;
 			}
 		}
@@ -681,9 +692,8 @@ int nrc_wim_set_ps_sync(struct nrc_hif_device *hdev, enum NRC_PS_MODE mode,
 	}
 done:
 	if (ret != 0) {
-		ERR_PS("PS WIM failed: mode=%s ret=%d (wim_try=%d/%d, check_try=%d/%d)",
-		       nrc_ps_mode_str(mode), ret, i + 1, NUM_WIM_SEND, j + 1,
-		       NUM_PS_CHECK);
+		ERR_PS("Sleep entry timeout: target not responding (mode=%s, polled %d times)",
+		       nrc_ps_mode_str(mode), j + 1);
 	}
 	return ret;
 }
@@ -779,21 +789,38 @@ int nrc_wim_request(struct sk_buff *skb, u16 cmd, int timeout,
 		goto free_skb;
 	}
 
-	NRC_WIM_RESP_LOCK(hdev, cmd);
-
-	if (hdev->wim_resp[cmd].skb != NULL) {
-		ERR_WIM("WIM response SKB slot busy for cmd %d(%s), cleaning up previous response",
+	/*
+	 * For fire-and-forget requests (no_resp=true), skip wim_resp access
+	 * during cleanup to prevent use-after-free when wim_resp is being freed.
+	 */
+	if (no_resp) {
+		/* Send without waiting for response - skip wim_resp slot management */
+		DBG_WIM("Fire-and-forget request for cmd %d(%s), skipping wim_resp access",
 			cmd, nrc_wim_cmd_str(cmd));
-		if (completion_done(&hdev->wim_resp[cmd].work)) {
-			/* Safely clear the SKB pointer to prevent double-free */
-			struct sk_buff *old_skb = hdev->wim_resp[cmd].skb;
-			hdev->wim_resp[cmd].skb = NULL;
-			NRC_SKB_TRACK_WIM_FREE(hdev, old_skb, cmd, 0, true,
-					       false);
-		} else {
-			NRC_WIM_RESP_UNLOCK(hdev, cmd);
-			ret = -EBUSY;
-			goto free_skb;
+	} else if (in_atomic()) {
+		/* We cannot wait for response in atomic context */
+		ERR_WIM("Cannot wait for response in atomic context for cmd %d(%s)",
+			cmd, nrc_wim_cmd_str(cmd));
+		ret = -EWOULDBLOCK;
+		goto free_skb;
+	} else {
+		NRC_WIM_RESP_LOCK(hdev, cmd);
+
+		if (hdev->wim_resp[cmd].skb != NULL) {
+			ERR_WIM("WIM response SKB slot busy for cmd %d(%s), cleaning up previous response",
+				cmd, nrc_wim_cmd_str(cmd));
+			if (completion_done(&hdev->wim_resp[cmd].work)) {
+				/* Safely clear the SKB pointer to prevent double-free */
+				struct sk_buff *old_skb =
+					hdev->wim_resp[cmd].skb;
+				hdev->wim_resp[cmd].skb = NULL;
+				NRC_SKB_TRACK_WIM_FREE(hdev, old_skb, cmd, 0,
+						       true, false);
+			} else {
+				NRC_WIM_RESP_UNLOCK(hdev, cmd);
+				ret = -EBUSY;
+				goto free_skb;
+			}
 		}
 	}
 
@@ -803,7 +830,7 @@ int nrc_wim_request(struct sk_buff *skb, u16 cmd, int timeout,
 	 * - Cloned SKB: owned by TX thread, freed after transmission
 	 * This ensures clear ownership and prevents use-after-free
 	 */
-	skb_tx = skb_clone(skb, GFP_KERNEL);
+	skb_tx = skb_clone(skb, in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
 	if (!skb_tx) {
 		ERR_WIM("Failed to clone SKB for cmd %d(%s)", cmd,
 			nrc_wim_cmd_str(cmd));
@@ -816,8 +843,10 @@ int nrc_wim_request(struct sk_buff *skb, u16 cmd, int timeout,
 	NRC_SKB_TRACK_ALLOC(hdev, skb_tx, HIF_TYPE_WIM, false, false);
 
 	if (!!wim_enqueue_to_tx(hdev, skb_tx, use_mcp_path)) {
-		NRC_WIM_RESP_UNLOCK(hdev, cmd);
 		/* Enqueue failed - will free skb_tx at free_skb_tx label */
+		if (!no_resp) {
+			NRC_WIM_RESP_UNLOCK(hdev, cmd);
+		}
 		ret = -EIO;
 		goto free_skb_tx;
 	}
@@ -827,7 +856,6 @@ int nrc_wim_request(struct sk_buff *skb, u16 cmd, int timeout,
 
 	/* If no response expected, return immediately after sending */
 	if (no_resp) {
-		NRC_WIM_RESP_UNLOCK(hdev, cmd);
 		ret = 0;
 		goto free_skb;
 	}

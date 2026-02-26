@@ -1,4 +1,4 @@
-# NRC Linux Driver - Modular Architecture
+# nrc_modular
 
 Three-layer modular architecture for Newracom NRC WiFi chipsets with SPI interface.
 
@@ -69,8 +69,7 @@ nrc_modular/
 │   ├── build-docker.sh         # Docker cross-compile script
 │   ├── build-builtin.sh        # Built-in kernel build script
 │   ├── enter-container.sh      # Interactive container shell
-│   ├── kernel-configs/         # Target device kernel configs
-│   └── rpi-target-kernel-upgrade.sh  # Target kernel upgrade script
+│   └── kernel-configs/         # Target device kernel configs
 │
 ├── common/                     # Shared headers
 │   ├── nrc.h                   # Core structures
@@ -260,8 +259,8 @@ sudo rmmod nrc_spi
 ### Using Start Script
 
 ```bash
-# Load all modules automatically
-sudo ./scripts/start_modular.py
+# Load all modules automatically (AP mode)
+sudo ./scripts/start_modular.py 1 0 US
 
 # Stop all modules
 sudo ./scripts/stop_modular.py

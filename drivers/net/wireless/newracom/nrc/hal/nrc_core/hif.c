@@ -76,7 +76,7 @@ static void restart_worker(struct work_struct *work)
 
 	INFO("Restart NRC");
 
-	nrc_nw_stop(true);   /* restart=true: ignore frontend check */
+	nrc_nw_stop(true); /* restart=true: ignore frontend check */
 	nrc_hif_ops_probe();
 #if defined(CONFIG_SUPPORT_BD)
 	/* Trigger regulatory notifier via HAL callback system */
@@ -172,10 +172,8 @@ struct nrc_hif_device *nrc_hif_alloc(struct device *dev, void *priv,
 	return hdev;
 }
 
-void nrc_hif_free(void)
+void nrc_hif_free(struct nrc_hif_device *hdev)
 {
-	struct nrc_hif_device *hdev = nrc_hal_core_get_hdev();
-
 	if (!hdev) {
 		ERR_HIF("Invalid HIF device");
 		return;
@@ -183,10 +181,10 @@ void nrc_hif_free(void)
 
 	DBG_HIF("free()");
 
-	nrc_hal_stop();
+	nrc_hal_stop(hdev);
 
 	/* Cleanup WIM response system */
-	nrc_wim_response_deinit();
+	nrc_wim_response_deinit(hdev);
 
 	/* Free shared parameters structure */
 	if (hdev->params) {
@@ -289,8 +287,8 @@ void nrc_hif_free_skb(struct nrc_hif_device *hdev, struct sk_buff *skb)
 		}
 
 		credit = DIV_ROUND_UP(skb->len, hdev->fw.info.buffer_size);
-		DBG_HIF("%s ac:%d, pend:%d, credit:%d", __func__, ac,
-			atomic_read(&hdev->credit.tx_pend[ac]), credit);
+		DBG_TX("%s ac:%d, pend:%d, credit:%d", __func__, ac,
+		       atomic_read(&hdev->credit.tx_pend[ac]), credit);
 		atomic_sub(credit, &hdev->credit.tx_pend[ac]);
 
 		/* Track FRAME SKB free after SPI TX complete (indirect alloc from mac80211) */
@@ -743,8 +741,9 @@ int nrc_xmit_wlan_frame(s8 vif_index, u16 aid, struct sk_buff *skb)
 		fh->info.tx.cipher = nrc_to_wim_cipher_type(key->cipher);
 		if (fh->info.tx.cipher == (uint8_t)WIM_CIPHER_TYPE_INVALID) {
 			if (ieee80211_has_protected(fc)) {
-				DBG_ST("protected frame bit is 1 but invalid cipher type(%d).",
-				       key->cipher);
+				DBG_STATE(
+					"protected frame bit is 1 but invalid cipher type(%d).",
+					key->cipher);
 				/* Track FRAME SKB free (TX path failure) */
 				NRC_SKB_TRACK_FREE(hdev, skb, HIF_TYPE_FRAME,
 						   false, false);
@@ -788,8 +787,8 @@ int nrc_xmit_wlan_frame(s8 vif_index, u16 aid, struct sk_buff *skb)
 
 #ifdef NRC_DBG_PRINT_ARP_FRAME
 	if (IS_ARP(skb)) {
-		DBG_PS("[%s] TX ARP [type:%d sype:%d, protected:%d, len:%d] [vif:%d, ac:%d]",
-		       __func__, WLAN_FC_GET_TYPE(fc), WLAN_FC_GET_STYPE(fc),
+		DBG_TX("TX ARP [type:%d sype:%d, protected:%d, len:%d] [vif:%d, ac:%d]",
+		       WLAN_FC_GET_TYPE(fc), WLAN_FC_GET_STYPE(fc),
 		       ieee80211_has_protected(fc), skb->len, vif_index,
 		       fh->flags.tx.ac);
 	}
@@ -943,14 +942,18 @@ int nrc_hal_start(void)
 		    NRC_PARAM_IDLE_MODE(hdev)) {
 			int wakeup_gpio = NRC_PARAM_POWER_SAVE_GPIO(hdev, 0);
 			if (wakeup_gpio > 0) {
-				ret = nrc_hif_ops_gpio_alloc(wakeup_gpio, "nrc-wakeup");
+				ret = nrc_hif_ops_gpio_alloc(wakeup_gpio,
+							     "nrc-wakeup");
 				if (ret) {
-					ERR_HIF("Failed to allocate wakeup GPIO %d: %d", wakeup_gpio, ret);
+					ERR_HIF("Failed to allocate wakeup GPIO %d: %d",
+						wakeup_gpio, ret);
 					nrc_hif_ops_stop();
 					hdev->started = false;
 					return ret;
 				}
-				DBG_HIF("Wakeup GPIO %d allocated successfully", wakeup_gpio);
+				INFO_HIF(
+					"Wakeup GPIO %d allocated successfully",
+					wakeup_gpio);
 			}
 		}
 	}
@@ -958,9 +961,9 @@ int nrc_hal_start(void)
 	return ret;
 }
 
-int nrc_hal_stop(void)
+int nrc_hal_stop(struct nrc_hif_device *hdev)
 {
-	struct nrc_hif_device *hdev = nrc_hal_core_get_hdev();
+	int wakeup_gpio;
 
 	if (!hdev) {
 		ERR_HIF("Invalid HIF device");
@@ -968,6 +971,17 @@ int nrc_hal_stop(void)
 	}
 
 	DBG_HIF("stop()");
+
+	/* Free wakeup pin GPIO unconditionally if allocated */
+	wakeup_gpio = NRC_PARAM_POWER_SAVE_GPIO(hdev, 0);
+	if (wakeup_gpio > 0) {
+		DBG_HIF("Freeing wakeup GPIO %d (started=%d, ps=%d, idle=%d)",
+			wakeup_gpio, hdev->started, NRC_PARAM_POWER_SAVE(hdev),
+			NRC_PARAM_IDLE_MODE(hdev));
+		nrc_hif_ops_gpio_free(wakeup_gpio);
+		INFO_HIF("Wakeup GPIO %d freed", wakeup_gpio);
+	}
+
 	if (!hdev->started)
 		return 0;
 
@@ -979,17 +993,7 @@ int nrc_hal_stop(void)
 	}
 
 	/* Flush TX work queue before stopping */
-	nrc_tx_flush_wq();
-
-	/* Free wakeup pin GPIO if it was allocated */
-	if (NRC_PARAM_POWER_SAVE(hdev) >= NRC_PS_DEEPSLEEP_TIM ||
-	    NRC_PARAM_IDLE_MODE(hdev)) {
-		int wakeup_gpio = NRC_PARAM_POWER_SAVE_GPIO(hdev, 0);
-		if (wakeup_gpio > 0) {
-			nrc_hif_ops_gpio_free(wakeup_gpio);
-			DBG_HIF("Wakeup GPIO %d freed", wakeup_gpio);
-		}
-	}
+	nrc_tx_flush_wq(hdev);
 
 	hdev->started = false;
 

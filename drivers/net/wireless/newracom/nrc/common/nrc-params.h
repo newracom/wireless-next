@@ -112,6 +112,9 @@ struct nrc_params {
 	unsigned int twt_num_in_group;
 	unsigned char twt_algo;
 
+	/* RAW (Restricted Access Window) */
+	bool raw;
+
 	/* Advanced Configuration */
 	bool ps_pretend;
 	int set_duty_cycle[3];
