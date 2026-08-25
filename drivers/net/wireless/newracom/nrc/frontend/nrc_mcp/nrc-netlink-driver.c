@@ -449,11 +449,11 @@ static int init_family(int id)
 	//family->priv = info;
 
 	ops[OPS_INIT].cmd = OPS_INIT;
-	ops[OPS_INIT].flags = 0;
+	ops[OPS_INIT].flags = GENL_ADMIN_PERM;
 	ops[OPS_INIT].policy = nrc_policy;
 
 	ops[OPS_REQUEST].cmd = OPS_REQUEST;
-	ops[OPS_REQUEST].flags = 0;
+	ops[OPS_REQUEST].flags = GENL_ADMIN_PERM;
 	ops[OPS_REQUEST].policy = nrc_policy;
 
 #if KERNEL_VERSION(6, 2, 0) <= LINUX_VERSION_CODE

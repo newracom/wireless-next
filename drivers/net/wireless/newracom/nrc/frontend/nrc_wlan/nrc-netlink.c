@@ -191,7 +191,7 @@ static struct genl_family nrc_nl_fam = {
 #ifdef CONFIG_SUPPORT_NEW_NETLINK
 	.parallel_ops = false,
 #endif
-	.netnsok = true,
+	.netnsok = false,
 	.pre_doit = nrc_nl_pre_doit,
 	.post_doit = nrc_nl_post_doit,
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
@@ -2436,6 +2436,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_WFA_CAPI_STA_GET_INFO,
 		.doit = capi_sta_get_info,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2448,6 +2449,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_WFA_CAPI_STA_SET_11N,
 		.doit = capi_sta_set_11n,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2460,6 +2462,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_WFA_CAPI_SEND_ADDBA,
 		.doit = capi_sta_send_addba,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
@@ -2473,6 +2476,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_WFA_CAPI_SEND_DELBA,
 		.doit = capi_sta_send_delba,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
@@ -2486,6 +2490,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_WFA_CAPI_BSS_MAX_IDLE,
 		.doit = capi_bss_max_idle,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2498,6 +2503,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_WFA_CAPI_BSS_MAX_IDLE_OFFSET,
 		.doit = capi_bss_max_idle_offset,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2510,6 +2516,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_TEST_MMIC_FAILURE,
 		.doit = test_mmic_failure,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2522,6 +2529,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_SHELL_RUN,
 		.doit = nrc_shell_run,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2534,6 +2542,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_SHELL_RUN_SIMPLE,
 		.doit = nrc_shell_run_simple,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2546,6 +2555,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_MGMT_FRAME_INJECTION,
 		.doit = nrc_inject_mgmt_frame,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2558,6 +2568,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_HALOW_SET_DUT,
 		.doit = halow_set_dut,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2570,6 +2581,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_CLI_APP_GET_INFO,
 		.doit = cli_app_get_info,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2583,6 +2595,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_CLI_APP_DRIVER,
 		.doit = cli_app_driver_cmd,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2596,6 +2609,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_APF_SET_ENABLE,
 		.doit = nl_apf_set_enable,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2608,6 +2622,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_APF_GET_ENABLE,
 		.doit = nl_apf_get_enable,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2620,6 +2635,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_APF_GET_CAPABILITIES,
 		.doit = nl_apf_get_cap,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2632,6 +2648,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_APF_SET_PACKET_FILTER,
 		.doit = nl_apf_set_filter,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2644,6 +2661,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_APF_GET_PACKET_FILTER,
 		.doit = nl_apf_get_filter,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2656,6 +2674,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_MIC_SCAN,
 		.doit = nrc_mic_scan,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2668,6 +2687,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_FRAME_INJECTION,
 		.doit = nrc_inject_frame,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2680,6 +2700,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_SET_IE,
 		.doit = nrc_set_ie,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2692,6 +2713,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_SET_SAE_DATA,
 		.doit = nrc_set_sae,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2704,6 +2726,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_SHELL_RUN_RAW,
 		.doit = nrc_shell_run_raw,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
@@ -2716,6 +2739,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd = NL_AUTO_BA_TOGGLE,
 		.doit = nrc_auto_ba_toggle,
+		.flags = GENL_ADMIN_PERM,
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 #elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
