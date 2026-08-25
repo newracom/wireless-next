@@ -2823,6 +2823,9 @@ static struct notifier_block nl_umac_netlink_notifier = {
 int nrc_netlink_init(struct nrc *nw)
 {
 	int rc = 0;
+
+	nrc_nw = nw;
+
 #if KERNEL_VERSION(4, 10, 0) <= NRC_TARGET_KERNEL_VERSION
 	nrc_nl_fam.ops = nl_umac_nl_ops;
 	nrc_nl_fam.n_ops = ARRAY_SIZE(nl_umac_nl_ops);
@@ -2841,6 +2844,7 @@ int nrc_netlink_init(struct nrc *nw)
 		ERR(
 			"genl_register_family_with_ops_groups() is failed (%d).",
 			rc);
+		nrc_nw = NULL;
 		return -EINVAL;
 	}
 
@@ -2849,10 +2853,10 @@ int nrc_netlink_init(struct nrc *nw)
 	if (rc) {
 		ERR("netlink_register_notifier() is failed (%d).", rc);
 		genl_unregister_family(&nrc_nl_fam);
+		nrc_nw = NULL;
 		return -EINVAL;
 	}
 
-	nrc_nw = nw;
 	return 0;
 }
 
@@ -2860,4 +2864,5 @@ void nrc_netlink_exit(void)
 {
 	netlink_unregister_notifier(&nl_umac_netlink_notifier);
 	genl_unregister_family(&nrc_nl_fam);
+	nrc_nw = NULL;
 }
