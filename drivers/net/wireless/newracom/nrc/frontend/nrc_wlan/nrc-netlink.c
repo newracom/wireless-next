@@ -156,13 +156,13 @@ static const struct nla_policy nl_umac_policy[NL_WFA_CAPI_ATTR_LAST] = {
 	[NL_MIC_SCAN_CHANNEL_START] = {.type = NLA_S32},
 	[NL_MIC_SCAN_CHANNEL_END] = {.type = NLA_S32},
 	[NL_CMD_RECOVERY_MSG] = {.type = NLA_NUL_STRING},
-	[NL_FRAME_INJECTION_BUFFER] = {.type = NLA_NUL_STRING},
+	[NL_FRAME_INJECTION_BUFFER] = {.type = NLA_BINARY},
 	[NL_SET_IE_EID] = {.type = NLA_U16},
 	[NL_SET_IE_LENGTH] = {.type = NLA_U8},
-	[NL_SET_IE_DATA] = {.type = NLA_NUL_STRING},
+	[NL_SET_IE_DATA] = {.type = NLA_BINARY},
 	[NL_SET_SAE_EID] = {.type = NLA_U16},
 	[NL_SET_SAE_LENGTH] = {.type = NLA_U16},
-	[NL_SET_SAE_DATA] = {.type = NLA_NUL_STRING},
+	[NL_SET_SAE_DATA] = {.type = NLA_BINARY},
 	[NL_SHELL_RUN_CMD_RAW] = {.type = NLA_NUL_STRING},
 	[NL_AUTO_BA_ON] = {.type = NLA_U8},
 	[NL_CLI_APP_DRIVER_CMD] = {.type = NLA_NUL_STRING},
@@ -2305,8 +2305,16 @@ static int nrc_mic_scan(struct sk_buff *skb, struct genl_info *info)
 static int nrc_inject_frame(struct sk_buff *skb, struct genl_info *info)
 {
 	struct sk_buff *buffer;
+	struct nlattr *attr = info->attrs[NL_FRAME_INJECTION_BUFFER];
 	uint8_t *frame;
-	int length = nla_len(info->attrs[NL_FRAME_INJECTION_BUFFER]);
+	int length;
+
+	if (!attr)
+		return -EINVAL;
+
+	length = nla_len(attr);
+	if (length < sizeof(__le16))
+		return -EINVAL;
 
 	buffer = dev_alloc_skb(nrc_nw->hw->extra_tx_headroom + length);
 	if (!buffer) {
@@ -2316,12 +2324,9 @@ static int nrc_inject_frame(struct sk_buff *skb, struct genl_info *info)
 	/* Track FRAME SKB allocation (TX path) */
 	NRC_SKB_TRACK_ALLOC(nrc_nw->hdev, buffer, HIF_TYPE_FRAME, false, false);
 	skb_reserve(buffer, nrc_nw->hw->extra_tx_headroom);
-	frame = skb_put(buffer, length - 1);
-#if KERNEL_VERSION(5, 11, 0) <= NRC_TARGET_KERNEL_VERSION
-	nla_strscpy(frame, info->attrs[NL_FRAME_INJECTION_BUFFER], length);
-#else
-	nla_strlcpy(frame, info->attrs[NL_FRAME_INJECTION_BUFFER], length);
-#endif
+
+	frame = skb_put(buffer, length);
+	nla_memcpy(frame, attr, length);
 
 	nrc_hal_ops_xmit_injected_frame(NULL, NULL, buffer);
 
@@ -2331,24 +2336,30 @@ static int nrc_inject_frame(struct sk_buff *skb, struct genl_info *info)
 static int nrc_set_ie(struct sk_buff *skb, struct genl_info *info)
 {
 	struct sk_buff *wim_skb;
-	struct wim_set_ie_param ie;
+	struct wim_set_ie_param ie = {};
+	struct nlattr *data_attr;
+	int data_len;
+
+	data_attr = info->attrs[NL_SET_IE_DATA];
+	if (!info->attrs[NL_SET_IE_EID] || !info->attrs[NL_SET_IE_LENGTH] ||
+	    !data_attr)
+		return -EINVAL;
 
 	ie.eid = nla_get_u16(info->attrs[NL_SET_IE_EID]);
 	ie.length = nla_get_u8(info->attrs[NL_SET_IE_LENGTH]);
+	data_len = nla_len(data_attr);
 
-#if KERNEL_VERSION(5, 11, 0) <= NRC_TARGET_KERNEL_VERSION
-	nla_strscpy(ie.data, info->attrs[NL_SET_IE_DATA],
-		    nla_len(info->attrs[NL_SET_IE_DATA]));
-#else
-	nla_strlcpy(ie.data, info->attrs[NL_SET_IE_DATA],
-		    nla_len(info->attrs[NL_SET_IE_DATA]));
-#endif
+	if (ie.length > INFO_ELEMENT_MAX_LENGTH ||
+	    (int)ie.length > data_len)
+		return -EINVAL;
+
 	wim_skb = nrc_hal_ops_wim_alloc_skb(WIM_CMD_SET_IE,
-					    sizeof(struct wim_set_ie_param));
+					    tlv_len(sizeof(struct wim_set_ie_param)));
 
 	if (!wim_skb)
 		return -EINVAL;
 
+	nla_memcpy(ie.data, data_attr, ie.length);
 	nrc_hal_ops_wim_skb_add_tlv(wim_skb, WIM_TLV_IE_PARAM,
 				    sizeof(struct wim_set_ie_param), &ie);
 	nrc_hal_ops_wim_request(wim_skb, 0, 0, false, NULL);
@@ -2358,49 +2369,29 @@ static int nrc_set_ie(struct sk_buff *skb, struct genl_info *info)
 
 static int nrc_set_sae(struct sk_buff *skb, struct genl_info *info)
 {
-	// 10/27/2020 Shinwoo Lee
-	// Annotated debug messages out, but left them for future debugging
-
 	struct sk_buff *wim_skb;
-	struct wim_set_sae_param sae;
-	int i;
-	// DBG_WIM"nrc-netlink driver Log (before copying eid)\n");
+	struct wim_set_sae_param sae = {};
+	struct nlattr *data_attr;
+
+	data_attr = info->attrs[NL_SET_SAE_DATA];
+	if (!info->attrs[NL_SET_SAE_EID] ||
+	    !info->attrs[NL_SET_SAE_LENGTH] || !data_attr)
+		return -EINVAL;
+
 	sae.eid = nla_get_u16(info->attrs[NL_SET_SAE_EID]);
-	// DBG_WIM"nrc-netlink driver Log (before copying length)\n");
 	sae.length = nla_get_u16(info->attrs[NL_SET_SAE_LENGTH]);
 
-	for (i = 0; i < sae.length; i++) {
-		if (i == 0)
-			DBG_WIM("Data: %x", *(info->attrs[NL_SET_SAE_DATA]));
-		else
-			DBG_WIM("%x", *(info->attrs[NL_SET_SAE_DATA] + i));
-	}
-	// DBG_WIM"nrc-netlink driver Log (before copying data)\n");
-#if KERNEL_VERSION(5, 11, 0) <= NRC_TARGET_KERNEL_VERSION
-	nla_strscpy(sae.data, info->attrs[NL_SET_SAE_DATA], sae.length + 1);
-#else
-	nla_strlcpy(sae.data, info->attrs[NL_SET_SAE_DATA], sae.length + 1);
-#endif
-	wim_skb = nrc_hal_ops_wim_alloc_skb(WIM_CMD_SET_SAE,
-					    sizeof(struct wim_set_sae_param));
+	if (sae.length > SET_SAE_MAX_LENGTH ||
+	    (int)sae.length > nla_len(data_attr))
+		return -EINVAL;
 
-	// nrc_dbg_enable(NRC_DBG_WIM);
-	// DBG_WIM("nrc-netlink driver log (after copying data)");
-	// DBG_WIM"----------------------\n");
-	// DBG_WIM"EID: %d\n", sae.eid);
-	// DBG_WIM"Length: %d\n", sae.length);
-	// for (i=0; i<sae.length; i++) {
-	// 	if (i==0) DBG_WIM"Data: %x", *(sae.data+i));
-	// 	else DBG_WIM"%x", *(sae.data+i));
-	// }
-	// DBG_WIM"\n----------------------\n");
+	wim_skb = nrc_hal_ops_wim_alloc_skb(WIM_CMD_SET_SAE,
+					    tlv_len(sizeof(struct wim_set_sae_param)));
 
 	if (!wim_skb)
 		return -EINVAL;
 
-	// DBG_WIM("nrc-netlink driver log (add tlv)");
-	// DBG_WIM("----------------------");
-	// DBG_WIM("size of tlv : %d", sizeof(struct wim_set_sae_param));
+	nla_memcpy(sae.data, data_attr, sae.length);
 
 	nrc_hal_ops_wim_skb_add_tlv(wim_skb, WIM_TLV_SAE_PARAM,
 				    sizeof(struct wim_set_sae_param), &sae);
