@@ -131,6 +131,14 @@ static bool nrc_set_stbc_rx(struct nrc *nw, u8 stream)
 	return true;
 }
 
+#define MAX_APF_LEN 2048
+
+struct apf_filter {
+	int len;
+	int offset;
+	uint8_t data[MAX_APF_LEN];
+};
+
 static const struct nla_policy nl_umac_policy[NL_WFA_CAPI_ATTR_LAST] = {
 	[NL_WFA_CAPI_INTF_ID] = {.type = NLA_NUL_STRING},
 	[NL_WFA_CAPI_PARAM_NAME] = {.type = NLA_NUL_STRING},
@@ -166,6 +174,11 @@ static const struct nla_policy nl_umac_policy[NL_WFA_CAPI_ATTR_LAST] = {
 	[NL_SHELL_RUN_CMD_RAW] = {.type = NLA_NUL_STRING},
 	[NL_AUTO_BA_ON] = {.type = NLA_U8},
 	[NL_CLI_APP_DRIVER_CMD] = {.type = NLA_NUL_STRING},
+	[NL_APF_PARAM_ENABLE] = {.type = NLA_S32},
+	[NL_APF_PARAM_FILTER] = {
+		.type = NLA_BINARY,
+		.len = sizeof(struct apf_filter),
+	},
 };
 
 static const struct genl_multicast_group nl_umac_mcast_grps[] = {
@@ -1963,7 +1976,6 @@ static int cli_app_driver_cmd(struct sk_buff *skb, struct genl_info *info)
 
 static int nl_apf_set_enable(struct sk_buff *skb, struct genl_info *info)
 {
-	void *param = NULL;
 	int ret;
 	struct sk_buff *msg;
 	void *hdr;
@@ -1998,15 +2010,12 @@ static int nl_apf_set_enable(struct sk_buff *skb, struct genl_info *info)
 		return -EMSGSIZE;
 	}
 
-	if (info->attrs[NL_APF_PARAM_ENABLE])
-		param = nla_data(info->attrs[NL_APF_PARAM_ENABLE]);
-
-	if (!param) {
+	if (!info->attrs[NL_APF_PARAM_ENABLE]) {
 		nlmsg_free(msg);
 		return -EINVAL;
 	}
 
-	enable = *(int *)param;
+	enable = nla_get_s32(info->attrs[NL_APF_PARAM_ENABLE]);
 
 	DBG_CAPI("%s %d", __func__, enable);
 
@@ -2125,14 +2134,6 @@ static int nl_apf_get_cap(struct sk_buff *skb, struct genl_info *info)
 	return genlmsg_reply(msg, info);
 }
 
-#define MAX_APF_LEN 2048
-
-struct apf_filter {
-	int len;
-	int offset;
-	uint8_t data[MAX_APF_LEN];
-};
-
 static int nl_apf_set_filter(struct sk_buff *skb, struct genl_info *info)
 {
 	void *param = NULL;
@@ -2170,13 +2171,13 @@ static int nl_apf_set_filter(struct sk_buff *skb, struct genl_info *info)
 		return -EMSGSIZE;
 	}
 
-	if (info->attrs[NL_APF_PARAM_FILTER])
-		param = nla_data(info->attrs[NL_APF_PARAM_FILTER]);
-
-	if (!param) {
+	if (!info->attrs[NL_APF_PARAM_FILTER] ||
+	    nla_len(info->attrs[NL_APF_PARAM_FILTER]) !=
+		sizeof(struct apf_filter)) {
 		nlmsg_free(msg);
 		return -EINVAL;
 	}
+	param = nla_data(info->attrs[NL_APF_PARAM_FILTER]);
 
 	filter = kmalloc(sizeof(struct apf_filter), GFP_KERNEL);
 	if (!filter) {
@@ -2185,6 +2186,13 @@ static int nl_apf_set_filter(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	memcpy(filter, param, sizeof(struct apf_filter));
+
+	if (filter->offset < 0 || filter->offset > MAX_APF_LEN ||
+	    filter->len < 0 || filter->len > MAX_APF_LEN) {
+		kfree(filter);
+		nlmsg_free(msg);
+		return -EINVAL;
+	}
 
 	DBG_CAPI("%s (len:%d, offset:%d)", __func__, filter->len,
 		 filter->offset);
@@ -2209,6 +2217,7 @@ static int nl_apf_get_filter(struct sk_buff *skb, struct genl_info *info)
 	void *param = NULL;
 	int ret;
 	struct apf_filter *filter;
+	int max_len;
 
 	if (NRC_DRV_IS_NOT_RUNNING(nrc_nw->hdev)) {
 		ERR("the target device cannot respond while deep sleep");
@@ -2240,13 +2249,13 @@ static int nl_apf_get_filter(struct sk_buff *skb, struct genl_info *info)
 
 	DBG_CAPI("%s", __func__);
 
-	if (info->attrs[NL_APF_PARAM_FILTER])
-		param = nla_data(info->attrs[NL_APF_PARAM_FILTER]);
-
-	if (!param) {
+	if (!info->attrs[NL_APF_PARAM_FILTER] ||
+	    nla_len(info->attrs[NL_APF_PARAM_FILTER]) !=
+		sizeof(struct apf_filter)) {
 		nlmsg_free(msg);
 		return -EINVAL;
 	}
+	param = nla_data(info->attrs[NL_APF_PARAM_FILTER]);
 
 	filter = kmalloc(sizeof(struct apf_filter), GFP_KERNEL);
 	if (!filter) {
@@ -2255,6 +2264,15 @@ static int nl_apf_get_filter(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	memcpy(filter, param, sizeof(struct apf_filter));
+
+	max_len = nrc_apf_get_maxlen(nrc_nw);
+	if (filter->offset < 0 || filter->offset > MAX_APF_LEN ||
+	    filter->len < 0 || filter->len > MAX_APF_LEN || max_len <= 0 ||
+	    (u64)filter->offset + (u64)filter->len > (u64)max_len) {
+		kfree(filter);
+		nlmsg_free(msg);
+		return -EINVAL;
+	}
 
 	DBG_CAPI("%s (offset:%d, len:%d)", __func__, filter->offset,
 		 filter->len);
