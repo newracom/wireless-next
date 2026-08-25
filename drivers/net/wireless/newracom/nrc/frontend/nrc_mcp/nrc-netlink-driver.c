@@ -163,6 +163,12 @@ static int process_control_h2f(struct sk_buff *skb, struct genl_info *info)
 
 	tlv = nla_data(attr);
 
+	if (nla_len(attr) < sizeof(struct wim_tlv))
+		return -EINVAL;
+
+	if ((size_t)tlv->l > nla_len(attr) - sizeof(struct wim_tlv))
+		return -EINVAL;
+
 	/* Process WIM TLVs specific to MCP control channel */
 	ret = nrc_mcp_process_wim_request_wait(CHAN_ID_CONTROL_H2F,
 					       CHAN_ID_CONTROL_F2H,
@@ -263,9 +269,21 @@ static int process_driver_h2d(struct sk_buff *skb, struct genl_info *info)
 
 	tlv = nla_data(attr);
 
+	if (nla_len(attr) < sizeof(struct wim_tlv))
+		return -EINVAL;
+
+	if ((size_t)tlv->l > nla_len(attr) - sizeof(struct wim_tlv))
+		return -EINVAL;
+
 	if (tlv->t == TLV_TYPE_DRIVER_RAW_PACKET) {
 		/* Raw packet with pre-built HIF header - send directly without modification */
 		driver_raw_packet_t *raw_pkt = (driver_raw_packet_t *)(tlv + 1);
+
+		if ((size_t)tlv->l < sizeof(driver_raw_packet_t) ||
+		    raw_pkt->length < sizeof(struct hif) ||
+		    (size_t)raw_pkt->length > tlv->l -
+			sizeof(driver_raw_packet_t))
+			return -EINVAL;
 
 		LOG_INFO("Raw packet TX: length=%d", raw_pkt->length);
 
@@ -281,17 +299,28 @@ static int process_driver_h2d(struct sk_buff *skb, struct genl_info *info)
 	}
 	if (tlv->t == TLV_TYPE_DRIVER_FIRMWARE) {
 		driver_firmware_t *firmware = (driver_firmware_t *)(tlv + 1);
-		LOG_INFO("MCP: Firmware download request skipped: %s",
-			 firmware->name);
+		char name[DRIVER_CHAR_MAX + 1];
+
+		if ((size_t)tlv->l < sizeof(driver_firmware_t))
+			return -EINVAL;
+		strscpy(name, firmware->name, sizeof(name));
+
+		LOG_INFO("MCP: Firmware download request skipped: %s", name);
 
 		/* Trigger network restart which will handle firmware download */
 		// nrc_hal_ops_nw_restart();
 	} else if (tlv->t == TLV_TYPE_DRIVER_SET_LOG) {
 		driver_log_level_t *log = (driver_log_level_t *)(tlv + 1);
+		char name[DRIVER_CHAR_MAX + 1];
+		char level[DRIVER_CHAR_MAX + 1];
 
-		LOG_INFO("MCP: SET_LOG name=%s level=%s", log->name,
-			 log->level);
-		nrc_logger_set(log->name, log->level);
+		if ((size_t)tlv->l < sizeof(driver_log_level_t))
+			return -EINVAL;
+		strscpy(name, log->name, sizeof(name));
+		strscpy(level, log->level, sizeof(level));
+
+		LOG_INFO("MCP: SET_LOG name=%s level=%s", name, level);
+		nrc_logger_set(name, level);
 	} else if (tlv->t == TLV_TYPE_DRIVER_REQ_CREDIT) {
 		struct sk_buff *reply_skb = dev_alloc_skb(2048);
 		driver_credit_t *credit;
