@@ -921,14 +921,18 @@ int spi_hif_wait_rom_boot(struct spi_device *spi, struct spi_sys_reg *sys,
 	if (priv)
 		priv->boot_poll = true;
 
-	do {
+	for (;;) {
 		if (spi_read_sys_reg(spi, sys) == 0 &&
 		    (!need_boot || sys->sw_id == SW_MAGIC_FOR_BOOT)) {
 			ret = 0;
 			break;
 		}
+
+		if (time_after_eq(jiffies, deadline))
+			break;
+
 		usleep_range(10000, 12000);
-	} while (time_before(jiffies, deadline));
+	}
 
 	if (priv)
 		priv->boot_poll = false;
