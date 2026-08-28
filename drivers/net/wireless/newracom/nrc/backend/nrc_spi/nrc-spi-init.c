@@ -63,7 +63,12 @@ static struct spi_device *g_spi_dev;
 static const struct spi_device_id nrc_spi_id[] = {{NRC_DRIVER_NAME, 0}, {}};
 MODULE_DEVICE_TABLE(spi, nrc_spi_id);
 
-#if defined(ENABLE_HW_RESET) && defined(CONFIG_SPI_USE_DT)
+/*
+ * Reset the chip once at probe so that it starts ROM boot from a known state.
+ * nrc_cspi_reset() picks the hardware line when the board has one and falls
+ * back to the soft reset otherwise. Readiness is only sampled here; the real
+ * wait, with escalating windows, happens in spi_hif_probe().
+ */
 static int nrc_cspi_device_hw_reset(struct nrc_spi_priv *priv)
 {
 	if (!priv) {
@@ -71,34 +76,20 @@ static int nrc_cspi_device_hw_reset(struct nrc_spi_priv *priv)
 		return -EINVAL;
 	}
 
-	if (!priv->reset_gpio) {
-		WARN_SPI("No reset GPIO defined");
-		return 0;
-	}
-
 	INFO("Resetting device");
+	nrc_cspi_reset(priv, priv->spi);
 
-	/* Assert (Active Low) */
-	gpiod_set_value_cansleep(priv->reset_gpio, 1);
-	msleep(10); /* 10ms assert */
-
-	/* Deassert */
-	gpiod_set_value_cansleep(priv->reset_gpio, 0);
-
-	/* Settle, then poll for the chip to respond (ROM-boot is confirmed
-	 * later in spi_hif_probe()). */
 	msleep(NRC_HW_RESET_SETTLE_MS);
 
 	if (spi_hif_wait_rom_boot(priv->spi, &priv->hw.sys,
 				  NRC_HW_RESET_READY_TIMEOUT_MS, false))
-		WARN_SPI("Device not responding %dms after reset",
+		WARN_SPI("Device not responding %dms after reset; probe will keep waiting",
 			 NRC_HW_RESET_SETTLE_MS +
 				 NRC_HW_RESET_READY_TIMEOUT_MS);
 	else
 		INFO("Device reset completed");
 	return 0;
 }
-#endif
 
 /**
  * nrc_cspi_probe - SPI device probe function
@@ -149,9 +140,17 @@ static int nrc_cspi_probe(struct spi_device *spi)
 		goto err_cspi_free;
 	}
 
-#if defined(ENABLE_HW_RESET) && defined(CONFIG_SPI_USE_DT)
+	/*
+	 * Publish priv before the reset. spi_read_sys_reg() and
+	 * spi_hif_wait_rom_boot() reach priv through spi_get_drvdata(), and
+	 * they use priv->boot_poll to suppress the read failures that are
+	 * expected while the target comes up. Setting it afterwards left that
+	 * suppression inoperative, so the readiness poll flooded the log with
+	 * rate-limited errors and the real poll count became unknowable.
+	 */
+	spi_set_drvdata(spi, priv);
+
 	nrc_cspi_device_hw_reset(priv);
-#endif
 
 	/* Register SPI device for HAL layer to discover */
 	ret = nrc_spi_register_device(spi, priv, nrc_spi_get_hif_ops());
@@ -160,7 +159,6 @@ static int nrc_cspi_probe(struct spi_device *spi)
 		goto err_gpio_free;
 	}
 
-	spi_set_drvdata(spi, priv);
 	g_spi_priv = priv; /* Set global reference */
 
 	/* Initialize SPI debugfs */

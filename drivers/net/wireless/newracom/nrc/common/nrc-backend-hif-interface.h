@@ -165,8 +165,13 @@ static inline int nrc_hif_ops_probe(void)
 {
 	struct nrc_hif_device *hdev = nrc_hal_core_get_hdev();
 	if (hdev && hdev->hif_ops && hdev->hif_ops->probe) {
-		hdev->hif_ops->probe(hdev);
-		return 0;
+		/*
+		 * Propagate the backend result. Returning 0 unconditionally
+		 * made the caller's reset-and-retry loop unreachable, so a
+		 * target that was merely slow to reach the ROM bootloader was
+		 * reported once and then failed the bootloader-mode check.
+		 */
+		return hdev->hif_ops->probe(hdev);
 	}
 	return -EOPNOTSUPP;
 }

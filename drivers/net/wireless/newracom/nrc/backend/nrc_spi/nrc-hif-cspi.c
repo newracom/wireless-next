@@ -2152,6 +2152,68 @@ void c_spi_config(struct nrc_spi_priv *priv, struct nrc_hif_device *hdev)
 	priv->data_irq_disabled = false;
 }
 
+/*
+ * Chip reset. Two mechanisms exist and only one is usable on a given board:
+ *
+ *   nrc_cspi_hw_reset() pulses the dedicated reset line. It is the only reset
+ *   that works when the chip has stopped answering on the bus, which is the
+ *   case while it is still coming out of a cold power-up.
+ *
+ *   nrc_cspi_sw_reset() writes the reset magic over C-SPI. It requires the chip
+ *   to be listening, so it cannot recover an unresponsive target.
+ *
+ * nrc_cspi_reset() is the single entry point used by the HIF ops: prefer the
+ * hardware line when the board provides one, otherwise fall back to the bus
+ * write.
+ */
+int nrc_cspi_hw_reset(struct nrc_spi_priv *priv)
+{
+	if (!priv)
+		return -EINVAL;
+
+#if defined(ENABLE_HW_RESET)
+#if defined(CONFIG_SPI_USE_DT)
+	if (!priv->reset_gpio)
+		return -ENODEV;
+
+	/* Assert (active low line, so a 1 here drives reset) */
+	gpiod_set_value_cansleep(priv->reset_gpio, 1);
+	msleep(10);
+	gpiod_set_value_cansleep(priv->reset_gpio, 0);
+#else
+	/*
+	 * Legacy numbering. HOST_GPIO_FOR_TARGET_RST is a global GPIO number,
+	 * which is only correct while the SoC gpiochip base is 0. Raspberry Pi
+	 * kernels from 6.x place that chip at base 512, so the same physical
+	 * pin is 516 there; boards on such kernels use the device tree path
+	 * above instead.
+	 */
+	nrc_gpio_set_value(HOST_GPIO_FOR_TARGET_RST, 0);
+	msleep(10);
+	nrc_gpio_set_value(HOST_GPIO_FOR_TARGET_RST, 1);
+#endif
+	INFO("Chip reset: hardware line");
+	return 0;
+#else
+	return -ENODEV;
+#endif
+}
+
+void nrc_cspi_sw_reset(struct spi_device *spi)
+{
+	/* 0xC8 is the magic value that asks the device to reset itself. */
+	c_spi_write_reg(spi, C_SPI_DEVICE_STATUS, 0xC8);
+	INFO("Chip reset: soft reset over C-SPI");
+}
+
+void nrc_cspi_reset(struct nrc_spi_priv *priv, struct spi_device *spi)
+{
+	if (nrc_cspi_hw_reset(priv) == 0)
+		return;
+
+	nrc_cspi_sw_reset(spi);
+}
+
 int nrc_cspi_gpio_alloc(struct spi_device *spi)
 {
 #if defined(ENABLE_HW_RESET)

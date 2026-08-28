@@ -64,14 +64,16 @@ static void spi_hif_reset_device(struct nrc_hif_device *hdev);
  * Device Management Operations
  * =========================================================================== */
 
-#define MAX_RESET_RETRY 2
 static int spi_hif_probe(struct nrc_hif_device *hdev)
 {
+	static const unsigned int windows_ms[] = NRC_PROBE_BOOT_WINDOWS_MS;
 	struct nrc_spi_priv *priv = nrc_spi_get_priv();
 	struct spi_device *spi = nrc_spi_get_device();
 	struct spi_sys_reg *sys;
+	ktime_t probe_start, attempt_start;
+	unsigned int window_ms;
 	bool need_boot;
-	int reset_retry = 0;
+	int attempt;
 
 	if (!priv) {
 		ERR("SPI not initialized");
@@ -82,10 +84,40 @@ static int spi_hif_probe(struct nrc_hif_device *hdev)
 	/* ROM bootloader is required only when the host downloads firmware. */
 	need_boot = (hdev->params->fw_name != NULL);
 
-retry_after_reset:
-	/* Poll for readiness after reset (ROM boot if downloading FW). */
-	if (spi_hif_wait_rom_boot(spi, sys, NRC_PROBE_BOOT_TIMEOUT_MS,
-				  need_boot) == 0) {
+	probe_start = ktime_get();
+
+	for (attempt = 0; attempt < ARRAY_SIZE(windows_ms); attempt++) {
+		window_ms = windows_ms[attempt];
+
+		/*
+		 * Reset before each attempt after the first. A reset restarts
+		 * ROM boot, so the window that follows has to be long enough
+		 * for the chip to finish booting; otherwise the retry is spent
+		 * interrupting the very boot it is waiting for.
+		 */
+		if (attempt > 0) {
+			WRN("Target not ready (sw_id=0x%x status=0x%x) within %u ms, SPI reset and retry %d/%zu with a %u ms window...",
+			    sys->sw_id, sys->status, windows_ms[attempt - 1],
+			    attempt, ARRAY_SIZE(windows_ms) - 1, window_ms);
+			spi_hif_reset_device(hdev);
+		}
+
+		attempt_start = ktime_get();
+
+		/* Poll for readiness after reset (ROM boot if downloading FW). */
+		if (spi_hif_wait_rom_boot(spi, sys, window_ms, need_boot) != 0)
+			continue;
+
+		/*
+		 * Report how long the chip took, so a slow cold power-up can be
+		 * told apart from a warm reset and the budget can be revisited
+		 * with field measurements instead of guesswork.
+		 */
+		INFO("SPI probe: target ready in %lld ms (attempt %d, window %u ms, total %lld ms, rom boot %s)",
+		     ktime_ms_delta(ktime_get(), attempt_start), attempt + 1,
+		     window_ms, ktime_ms_delta(ktime_get(), probe_start),
+		     need_boot ? "required" : "not required");
+
 		DBG_HIF("probe: chip_id=%04x modem_id=%08x sw_id=%08x status=%d",
 			sys->chip_id, sys->modem_id, sys->sw_id, sys->status);
 
@@ -97,28 +129,17 @@ retry_after_reset:
 			c_spi_config(priv, hdev);
 			if (hdev->chip_id != sys->chip_id)
 				nrc_hif_set_model_conf(hdev, sys->chip_id);
-
-			if (reset_retry > 0)
-				INFO("SPI probe succeeded after %d reset(s)",
-				     reset_retry);
 			return 0;
 		default:
 			ERR("Invalid target chip %04x", sys->chip_id);
-			BUG();
+			return -ENODEV;
 		}
 	}
 
-	/* Not ready within timeout - SPI reset and retry a bounded number of times. */
-	if (reset_retry < MAX_RESET_RETRY) {
-		WRN("Target not ready (sw_id=0x%x status=0x%x), SPI reset (retry %d/%d)...",
-		    sys->sw_id, sys->status, reset_retry + 1, MAX_RESET_RETRY);
-		spi_hif_reset_device(hdev);
-		reset_retry++;
-		goto retry_after_reset;
-	}
-
-	ERR_HIF("Probe failed: target not ready after %d reset(s)",
-		reset_retry);
+	ERR_HIF("Probe failed: target not ready after %zu attempt(s), %lld ms total (budget %u ms, sw_id=0x%x status=0x%x)",
+		ARRAY_SIZE(windows_ms),
+		ktime_ms_delta(ktime_get(), probe_start),
+		NRC_PROBE_BOOT_BUDGET_MS, sys->sw_id, sys->status);
 	return -1;
 }
 
@@ -587,7 +608,7 @@ static int spi_hif_wait_rxq_slot(struct nrc_hif_device *hdev, u8 *data, u32 len)
 
 static void spi_hif_reset_device(struct nrc_hif_device *hdev)
 {
-	// struct nrc_spi_priv *priv = nrc_spi_get_priv();
+	struct nrc_spi_priv *priv = nrc_spi_get_priv();
 	struct spi_device *spi = nrc_spi_get_device();
 	int i;
 
@@ -595,8 +616,13 @@ static void spi_hif_reset_device(struct nrc_hif_device *hdev)
 		for (i = 0; i < 180; i++)
 			_c_spi_write_dummy(spi);
 	}
-	/* 0xC8 is magic number for reset the device */
-	c_spi_write_reg(spi, C_SPI_DEVICE_STATUS, 0xC8);
+
+	/*
+	 * Reset through the hardware line when the board has one. A soft reset
+	 * has to travel over C-SPI, so it cannot reach a target that has
+	 * stopped answering - exactly the case this reset is asked to recover.
+	 */
+	nrc_cspi_reset(priv, spi);
 }
 
 void spi_hif_reset_rx(struct nrc_hif_device *hdev)

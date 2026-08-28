@@ -115,8 +115,22 @@ struct spi_status_reg {
 #define NRC_HW_RESET_SETTLE_MS 100
 /* Poll window for the chip to return on the bus after HW reset. */
 #define NRC_HW_RESET_READY_TIMEOUT_MS 300
-/* Wait for ROM boot per probe attempt. */
+/*
+ * Wait for ROM boot per probe attempt.
+ *
+ * The windows escalate because a cold power-up needs markedly longer to reach
+ * the ROM bootloader than a reset of an already powered chip: a warm target
+ * answers in roughly 300 ms, while a cold power-up has been observed to need
+ * more than 800 ms after reset. Each retry resets the chip again, which
+ * restarts ROM boot, so a fixed short window can never catch a slow chip no
+ * matter how many retries are allowed - the window itself has to grow.
+ *
+ * The first window is unchanged so a healthy target probes as fast as before.
+ * The cumulative worst case is NRC_PROBE_BOOT_BUDGET_MS.
+ */
 #define NRC_PROBE_BOOT_TIMEOUT_MS 500
+#define NRC_PROBE_BOOT_WINDOWS_MS { 500, 1500, 3000 }
+#define NRC_PROBE_BOOT_BUDGET_MS 5000
 
 #define CSPI_EIRQ_MODE 0x05
 #define CSPI_EIRQ_Q_ENABLE 0x3
@@ -224,6 +238,9 @@ int spi_read_sys_reg(struct spi_device *spi, struct spi_sys_reg *sys);
 int spi_hif_wait_rom_boot(struct spi_device *spi, struct spi_sys_reg *sys,
 			  unsigned int timeout_ms, bool need_boot);
 void nrc_spi_free_irq(struct nrc_spi_priv *priv);
+int nrc_cspi_hw_reset(struct nrc_spi_priv *priv);
+void nrc_cspi_sw_reset(struct spi_device *spi);
+void nrc_cspi_reset(struct nrc_spi_priv *priv, struct spi_device *spi);
 int nrc_cspi_gpio_alloc(struct spi_device *spi);
 void nrc_cspi_gpio_free(struct spi_device *spi);
 struct nrc_spi_priv *nrc_cspi_alloc(struct spi_device *spi);
