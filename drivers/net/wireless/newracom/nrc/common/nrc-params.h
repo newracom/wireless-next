@@ -13,6 +13,22 @@
 
 #include <linux/types.h>
 
+/*
+ * Canonical names of the files the driver requests from the firmware loader.
+ * Defined once here so that the module parameter defaults and the
+ * MODULE_FIRMWARE() declarations in the HAL cannot drift apart.
+ *
+ * Both are overridable at load time through the fw_name and bd_name module
+ * parameters. MODULE_FIRMWARE() only records the expected default in .modinfo
+ * for initramfs and packaging tools; it has no effect on what is loaded.
+ *
+ * NRC_DEFAULT_FW_NAME is deliberately not used as the fw_name default: a NULL
+ * fw_name means the device boots its own firmware from flash or XIP, and
+ * forcing a name would require ROM bootloader mode on every board.
+ */
+#define NRC_DEFAULT_FW_NAME "uni_s1g.bin"
+#define NRC_DEFAULT_BD_NAME "nrc7394_bd.dat"
+
 /**
  * struct nrc_params - NRC Module Parameters Structure
  *

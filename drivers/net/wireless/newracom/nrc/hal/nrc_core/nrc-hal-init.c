@@ -17,6 +17,7 @@
 #include "nrc-backend-hif-interface.h"
 #include "nrc-hal-core-callback.h"
 #include "nrc-hal-core-interface.h"
+#include "nrc-params.h"
 
 /* Local module headers */
 #include "nrc-hal-ops-impl.h"
@@ -366,3 +367,12 @@ MODULE_DESCRIPTION("Newracom NRC Core HAL Driver");
 MODULE_AUTHOR("Newracom, Inc.");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_VERSION("1.0");
+
+/*
+ * Files this module requests through request_firmware(): the firmware image in
+ * nrc_fw_check_file() and the board data in nrc-bd.c. Declared so that
+ * initramfs and packaging tools can discover them; the fw_name and bd_name
+ * module parameters still decide what is actually loaded.
+ */
+MODULE_FIRMWARE(NRC_DEFAULT_FW_NAME);
+MODULE_FIRMWARE(NRC_DEFAULT_BD_NAME);

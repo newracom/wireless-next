@@ -41,10 +41,16 @@ char *bl_name;
 module_param(bl_name, charp, 0444);
 MODULE_PARM_DESC(bl_name, "Boot Loader file name");
 
-/* Firmware file name */
+/*
+ * Firmware file name. Left NULL on purpose: a NULL fw_name selects flash or
+ * XIP boot, where the device runs its own firmware and the host downloads
+ * nothing. Setting a default here would demand ROM bootloader mode on every
+ * board. The canonical name for hosts that do download is NRC_DEFAULT_FW_NAME,
+ * which is what MODULE_FIRMWARE() in the HAL declares.
+ */
 char *fw_name = NULL;
 module_param(fw_name, charp, 0444);
-MODULE_PARM_DESC(fw_name, "Firmware file name");
+MODULE_PARM_DESC(fw_name, "Firmware file name (NULL: flash/XIP boot, no download)");
 
 char *fw_update_name;
 module_param(fw_update_name, charp, 0444);
@@ -56,7 +62,7 @@ MODULE_PARM_DESC(auto_fw_update, "Enable Beacon Bypass");
 
 /* Board Data file name */
 #if defined(CONFIG_SUPPORT_BD)
-char *bd_name = "bd.dat";
+char *bd_name = NRC_DEFAULT_BD_NAME;
 module_param(bd_name, charp, 0600);
 MODULE_PARM_DESC(bd_name, "Board Data file name");
 #endif /* defined(CONFIG_SUPPORT_BD) */

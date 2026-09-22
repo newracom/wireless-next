@@ -30,11 +30,11 @@
 #include "nrc-mcp-init.h"
 #include "nrc-mcp-params.h"
 
-char *fw_name = "sample_nrc7394.bin";
+char *fw_name = NRC_DEFAULT_FW_NAME;
 module_param(fw_name, charp, 0444);
 MODULE_PARM_DESC(fw_name, "Firmware file name");
 
-char *bd_name = "bd.dat";
+char *bd_name = NRC_DEFAULT_BD_NAME;
 module_param(bd_name, charp, 0600);
 MODULE_PARM_DESC(bd_name, "Board Data file name");
 
