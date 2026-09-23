@@ -127,7 +127,7 @@ static int nrc_mcp_module_init(void)
 	}
 
 	/* Update debug system to use MCP virtual device */
-	g_dev = g_mcp_virtual_dev;
+	nrc_debug_dev = g_mcp_virtual_dev;
 
 	/* Initialize MCP callback system */
 	ret = nrc_mcp_callback_init();
@@ -160,7 +160,7 @@ static int nrc_mcp_module_init(void)
 	}
 
 	/* 5. Initialize debugfs for SKB monitoring */
-	nrc_init_debugfs(g_mcp_dev);
+	nrc_mcp_init_debugfs(g_mcp_dev);
 
 	INFO("NRC MCP Module initialized successfully");
 	return 0;
@@ -189,7 +189,7 @@ static void nrc_mcp_module_exit(void)
 
 	/* Cleanup debugfs */
 	if (g_mcp_dev) {
-		nrc_exit_debugfs(g_mcp_dev);
+		nrc_mcp_exit_debugfs(g_mcp_dev);
 	}
 
 	/* Cleanup netlink interface */

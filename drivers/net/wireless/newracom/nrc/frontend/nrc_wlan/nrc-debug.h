@@ -34,9 +34,6 @@
 /* Forward declarations */
 struct nrc;
 
-/* Global device pointer */
-extern struct device *g_dev;
-
 /* WLAN debug macros:
  * Module identity is provided by the kernel device prefix (e.g., "ieee80211 nrc80211:")
  * Use generic INFO/WARN/ERR from nrc-debug-common.h directly.

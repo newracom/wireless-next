@@ -37,10 +37,8 @@
 #if defined(CONFIG_SUPPORT_BD)
 #endif
 
-/* Global debug variables - defined as module parameters in nrc-wlan-params.c */
-extern unsigned long debug_mask;
-extern int debug_level;
-struct device *g_dev;
+/* Debug device for this layer; level and mask are module parameters in nrc-wlan-params.c */
+struct device *nrc_debug_dev;
 
 /* Note: Common debugfs entries moved to nrc_core module:
  *   - nrc_credit, nrc_debug, nrc_cspi, nrc_hif, nrc_reset
@@ -73,13 +71,13 @@ DEFINE_SIMPLE_ATTRIBUTE(nrc_debugfs_restart_device_fops,
 /* WLAN module-specific debug mask control */
 static int nrc_wlan_debugfs_debug_read(void *data, u64 *val)
 {
-	*val = debug_mask;
+	*val = nrc_debug_mask;
 	return 0;
 }
 
 static int nrc_wlan_debugfs_debug_write(void *data, u64 val)
 {
-	debug_mask = val;
+	nrc_debug_mask = val;
 	return 0;
 }
 
@@ -90,14 +88,14 @@ DEFINE_SIMPLE_ATTRIBUTE(nrc_wlan_debugfs_debug_fops,
 /* WLAN module-specific debug level control */
 static int nrc_wlan_debugfs_level_read(void *data, u64 *val)
 {
-	*val = debug_level;
+	*val = nrc_debug_level;
 	return 0;
 }
 
 static int nrc_wlan_debugfs_level_write(void *data, u64 val)
 {
 	if (val < NRC_DBG_LEVEL_MAX)
-		debug_level = (enum NRC_DEBUG_LEVEL)val;
+		nrc_debug_level = (enum NRC_DEBUG_LEVEL)val;
 	return 0;
 }
 
@@ -544,7 +542,7 @@ void nrc_init_debugfs(struct nrc *nw)
 
 	nw->debugfs = nw->hw->wiphy->debugfsdir;
 
-	/* Note: Common entries (credit, slot, debug_mask, debug_level, etc.)
+	/* Note: Common entries (credit, slot, nrc_debug_mask, nrc_debug_level, etc.)
 	 * are in nrc_core module at /sys/kernel/debug/nrc_core/
 	 */
 

@@ -88,8 +88,8 @@ static const char *const nrc_debug_category_names[] = {
 /* Optimized debug macros - filter at call site to avoid function overhead */
 #define DBG(masks, fmt, ...)                                               \
 	do {                                                               \
-		if (unlikely(debug_level >= NRC_DBG_LEVEL_DBG &&           \
-			     ((masks) & debug_mask)))                      \
+		if (unlikely(nrc_debug_level >= NRC_DBG_LEVEL_DBG &&           \
+			     ((masks) & nrc_debug_mask)))                      \
 			nrc_dbg_level_multi(NRC_DBG_LEVEL_DBG, masks, fmt, \
 					    ##__VA_ARGS__);                \
 	} while (0)
@@ -97,8 +97,8 @@ static const char *const nrc_debug_category_names[] = {
 /* Verbose/trace macro - very high frequency paths */
 #define VBS(masks, fmt, ...)                                               \
 	do {                                                               \
-		if (unlikely(debug_level >= NRC_DBG_LEVEL_VBS &&           \
-			     ((masks) & debug_mask)))                      \
+		if (unlikely(nrc_debug_level >= NRC_DBG_LEVEL_VBS &&           \
+			     ((masks) & nrc_debug_mask)))                      \
 			nrc_dbg_level_multi(NRC_DBG_LEVEL_VBS, masks, fmt, \
 					    ##__VA_ARGS__);                \
 	} while (0)
@@ -228,47 +228,67 @@ static const char *const nrc_debug_category_names[] = {
 #define MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
 #define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
 
-/* Global debug variables - each module should define these */
-extern unsigned long debug_mask;
-extern int debug_level;
-extern struct device *g_dev;
+/* Per-layer debug state.
+ *
+ * Each layer (nrc_spi, nrc_core, nrc_wlan, nrc-mcp) owns its own debug level,
+ * category mask and reporting device, exposed as its "debug_level" and
+ * "debug_mask" module parameters. The C symbols behind them must be unique
+ * per layer so that every layer can be linked into a single image
+ * (CONFIG_NRC7394=y). Each layer's Makefile therefore sets NRC_DBG_PREFIX
+ * (for example nrc_spi_), and all code refers to the state through the
+ * prefix-independent names below.
+ */
+#ifndef NRC_DBG_PREFIX
+#error "NRC_DBG_PREFIX must be defined by the layer's Makefile"
+#endif
+#define __NRC_DBG_CAT(a, b)	a##b
+#define _NRC_DBG_CAT(a, b)	__NRC_DBG_CAT(a, b)
+#define NRC_DBG_SYM(name)	_NRC_DBG_CAT(NRC_DBG_PREFIX, name)
+
+#define nrc_debug_level		NRC_DBG_SYM(debug_level)
+#define nrc_debug_mask		NRC_DBG_SYM(debug_mask)
+#define nrc_debug_dev		NRC_DBG_SYM(debug_dev)
+
+extern int nrc_debug_level;
+extern unsigned long nrc_debug_mask;
+extern struct device *nrc_debug_dev;
 
 /* Core debug functions - inline implementations for common use */
 static inline void nrc_dbg_init(struct device *dev)
 {
 	/* Module parameters (debug_level, debug_mask) are already set during insmod */
-	g_dev = dev;
+	nrc_debug_dev = dev;
 }
 
 static inline void nrc_dbg_enable(enum NRC_DEBUG_MASK mk)
 {
-	set_bit(mk, &debug_mask);
+	set_bit(mk, &nrc_debug_mask);
 }
 
 static inline void nrc_dbg_disable(enum NRC_DEBUG_MASK mk)
 {
-	clear_bit(mk, &debug_mask);
+	clear_bit(mk, &nrc_debug_mask);
 }
 
 static inline void nrc_dbg_set_level(enum NRC_DEBUG_LEVEL level)
 {
 	if (level < NRC_DBG_LEVEL_MAX)
-		debug_level = level;
+		nrc_debug_level = level;
 }
 
 static inline enum NRC_DEBUG_LEVEL nrc_dbg_get_level(void)
 {
-	return debug_level;
+	return nrc_debug_level;
 }
 
 static inline void nrc_hal_set_debug_mask(unsigned long mask)
 {
-	debug_mask = mask;
+	nrc_debug_mask = mask;
 }
 
 static inline void nrc_set_debug_mask(unsigned long mask)
 {
-	debug_mask = mask;
+	nrc_debug_mask = mask;
 }
 
 /* Warning function - shown based on level, no mask check */
@@ -281,7 +301,7 @@ static inline void nrc_dbg_warn(const char *fmt, ...)
 	};
 
 	/* WARN level messages: only check if level allows WARN */
-	if (NRC_DBG_LEVEL_WARN > debug_level)
+	if (NRC_DBG_LEVEL_WARN > nrc_debug_level)
 		return;
 
 	/* No category mask check for warnings - they should be shown based on level only */
@@ -295,10 +315,10 @@ static inline void nrc_dbg_warn(const char *fmt, ...)
 	}
 	va_end(args);
 
-	if (g_dev == NULL)
+	if (nrc_debug_dev == NULL)
 		pr_warn_ratelimited("%s\n", buf); /* Use pr_warn_ratelimited */
 	else
-		dev_warn_ratelimited(g_dev, "%s\n",
+		dev_warn_ratelimited(nrc_debug_dev, "%s\n",
 				     buf); /* Use dev_warn_ratelimited */
 }
 
@@ -312,7 +332,7 @@ static inline void nrc_dbg_info(const char *fmt, ...)
 	};
 
 	/* INFO level messages: only check if level allows INFO */
-	if (NRC_DBG_LEVEL_INFO > debug_level)
+	if (NRC_DBG_LEVEL_INFO > nrc_debug_level)
 		return;
 
 	/* No category mask check for info - they should be shown based on level only */
@@ -326,10 +346,10 @@ static inline void nrc_dbg_info(const char *fmt, ...)
 	}
 	va_end(args);
 
-	if (g_dev == NULL)
+	if (nrc_debug_dev == NULL)
 		pr_info_ratelimited("%s\n", buf); /* Use pr_info_ratelimited */
 	else
-		dev_info_ratelimited(g_dev, "%s\n",
+		dev_info_ratelimited(nrc_debug_dev, "%s\n",
 				     buf); /* Use dev_info_ratelimited */
 }
 
@@ -343,7 +363,7 @@ static inline void nrc_dbg_err(const char *fmt, ...)
 	};
 
 	/* ERR level messages: only check if level allows ERR (should always pass) */
-	if (NRC_DBG_LEVEL_ERR > debug_level)
+	if (NRC_DBG_LEVEL_ERR > nrc_debug_level)
 		return;
 
 	/* No category mask check for errors - they should always be shown */
@@ -357,10 +377,10 @@ static inline void nrc_dbg_err(const char *fmt, ...)
 	}
 	va_end(args);
 
-	if (g_dev == NULL)
+	if (nrc_debug_dev == NULL)
 		pr_err_ratelimited("%s\n", buf); /* Use pr_err_ratelimited */
 	else
-		dev_err_ratelimited(g_dev, "%s\n",
+		dev_err_ratelimited(nrc_debug_dev, "%s\n",
 				    buf); /* Use dev_err_ratelimited */
 }
 
@@ -373,7 +393,7 @@ static inline void nrc_dbg_level(enum NRC_DEBUG_LEVEL level,
 	static char buf[512];
 
 	/* Check debug level and category mask using fast bitwise check */
-	if (unlikely(level > debug_level || !((BIT(mk)) & debug_mask)))
+	if (unlikely(level > nrc_debug_level || !((BIT(mk)) & nrc_debug_mask)))
 		return;
 
 	va_start(args, fmt);
@@ -385,10 +405,10 @@ static inline void nrc_dbg_level(enum NRC_DEBUG_LEVEL level,
 	}
 	va_end(args);
 
-	if (g_dev == NULL)
+	if (nrc_debug_dev == NULL)
 		pr_info_ratelimited("%s\n", buf);
 	else
-		dev_info_ratelimited(g_dev, "%s\n", buf);
+		dev_info_ratelimited(nrc_debug_dev, "%s\n", buf);
 }
 
 /* Multi-mask debug function - allows multiple category masks */
@@ -403,7 +423,7 @@ static inline void nrc_dbg_level_multi(enum NRC_DEBUG_LEVEL level,
 	int count = 0;
 
 	/* 1. Fast mask check - remove the redundant loop */
-	if (unlikely(level > debug_level || !(masks & debug_mask)))
+	if (unlikely(level > nrc_debug_level || !(masks & nrc_debug_mask)))
 		return;
 
 	/* 2. Build prefix from all masks in the combination - only when printing */
@@ -430,10 +450,10 @@ static inline void nrc_dbg_level_multi(enum NRC_DEBUG_LEVEL level,
 	}
 	va_end(args);
 
-	if (g_dev == NULL)
+	if (nrc_debug_dev == NULL)
 		pr_info_ratelimited("%s\n", buf);
 	else
-		dev_info_ratelimited(g_dev, "%s\n", buf);
+		dev_info_ratelimited(nrc_debug_dev, "%s\n", buf);
 }
 
 /* Loopback debug */

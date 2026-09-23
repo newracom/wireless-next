@@ -30,11 +30,11 @@
 #include "nrc-mcp-init.h"
 #include "nrc-mcp-params.h"
 
-char *fw_name = "sample_nrc7394.bin";
+static char *fw_name = "sample_nrc7394.bin";
 module_param(fw_name, charp, 0444);
 MODULE_PARM_DESC(fw_name, "Firmware file name");
 
-char *bd_name = "bd.dat";
+static char *bd_name = "bd.dat";
 module_param(bd_name, charp, 0600);
 MODULE_PARM_DESC(bd_name, "Board Data file name");
 
@@ -45,13 +45,13 @@ MODULE_PARM_DESC(
 	"Enable MCP priority: suspend WLAN TX when MCP is transmitting (default: false)");
 
 /* Debug level: 0=ERR, 1=WARN, 2=INFO, 3=DBG */
-int debug_level = DEFAULT_NRC_DBG_LEVEL;
-module_param(debug_level, int, 0600);
+int nrc_debug_level = DEFAULT_NRC_DBG_LEVEL;
+module_param_named(debug_level, nrc_debug_level, int, 0600);
 MODULE_PARM_DESC(debug_level, "Debug level (0=ERR, 1=WARN, 2=INFO, 3=DBG)");
 
 /* Debug mask: bitmask for categories */
-unsigned long debug_mask = DEFAULT_NRC_DBG_MASK;
-module_param(debug_mask, ulong, 0600);
+unsigned long nrc_debug_mask = DEFAULT_NRC_DBG_MASK;
+module_param_named(debug_mask, nrc_debug_mask, ulong, 0600);
 MODULE_PARM_DESC(debug_mask, "Debug category mask (BASIC=0x1, HIF=0x2, WIM=0x4, TX=0x8, RX=0x10, MAC=0x20, CAPI=0x40, PS=0x80, STATS=0x100, STATE=0x200, BD=0x400, FW=0x800, AMPDU=0x1000, CREDIT=0x2000, SLOT=0x4000, BUS=0x8000, ALL=0xFFFFFFFF)");
 
 /* ===========================================================================

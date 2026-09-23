@@ -283,13 +283,13 @@ static int nrc_hal_remove(struct platform_device *pdev)
  * =========================================================================== */
 
 /* Debug level: 0=ERR, 1=WARN, 2=INFO, 3=DBG */
-int debug_level = DEFAULT_NRC_DBG_LEVEL;
-module_param(debug_level, int, 0600);
+int nrc_debug_level = DEFAULT_NRC_DBG_LEVEL;
+module_param_named(debug_level, nrc_debug_level, int, 0600);
 MODULE_PARM_DESC(debug_level, "Debug level (0=ERR, 1=WARN, 2=INFO, 3=DBG)");
 
 /* Debug mask: bitmask for categories */
-unsigned long debug_mask = DEFAULT_NRC_DBG_MASK;
-module_param(debug_mask, ulong, 0600);
+unsigned long nrc_debug_mask = DEFAULT_NRC_DBG_MASK;
+module_param_named(debug_mask, nrc_debug_mask, ulong, 0600);
 MODULE_PARM_DESC(
 	debug_mask,
 	"Debug category mask (BASIC=0x1, HIF=0x2, WIM=0x4, TX=0x8, RX=0x10, MAC=0x20, CAPI=0x40, PS=0x80, STATE=0x100, BD=0x200, FW=0x400, AMPDU=0x800, CREDIT=0x1000, SLOT=0x2000, BUS=0x4000, ALL=0xFFFFFFFF)");

@@ -31,8 +31,7 @@ declared in `common/`; no layer includes another layer's private headers.
 ```
 nrc/
 ├── Kconfig                 CONFIG_NRC7394, CONFIG_NRC7394_DEBUG, CONFIG_NRC7394_MCP
-├── Kbuild                  In-tree build entry (recurses into the layers below)
-├── Makefile                Out-of-tree build helper
+├── Makefile                Kbuild entry (recurses into the layers below)
 ├── common/                 Shared headers and cross-layer interfaces
 ├── backend/
 │   ├── dts/                Example device-tree overlay
@@ -57,13 +56,30 @@ Dependencies: `CONFIG_MAC80211`, `CONFIG_SPI`, `CONFIG_FW_LOADER`.
 
 ## Building
 
-As part of the kernel tree:
+The driver is built by the kernel build system (Kbuild) like any other
+in-tree driver; there is no separate out-of-tree build.
 
 ```sh
 make menuconfig                                  # enable CONFIG_NRC7394=m
 make -j$(nproc) modules
-make -j$(nproc) M=drivers/net/wireless/newracom/nrc modules   # this driver only
 ```
+
+To rebuild only this directory in a configured tree:
+
+```sh
+make -j$(nproc) M=drivers/net/wireless/newracom/nrc modules
+```
+
+If the tree's configuration does not select the driver, the options can be
+given on the command line instead:
+
+```sh
+make -j$(nproc) M=drivers/net/wireless/newracom/nrc \
+     CONFIG_NRC7394=m CONFIG_NRC7394_MCP=m modules
+```
+
+`CONFIG_NRC7394_DEBUG=y` enables the driver's debug output and the
+debug-only interfaces; the kernel's own debug-info options control symbols.
 
 ## Firmware and board data
 

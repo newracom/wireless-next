@@ -140,11 +140,11 @@ void nrc_wlan_hal_early_cleanup(void)
 	}
 
 	/* Free MAC80211 hardware allocated in WLAN layer.
-	 * Clear g_dev first: ieee80211_free_hw() releases wiphy->dev which
-	 * g_dev points to; any subsequent nrc_dbg_level() call after this
+	 * Clear nrc_debug_dev first: ieee80211_free_hw() releases wiphy->dev which
+	 * nrc_debug_dev points to; any subsequent nrc_dbg_level() call after this
 	 * must not dereference the freed device (falls back to pr_info). */
 	if (g_hw) {
-		g_dev = NULL;
+		nrc_debug_dev = NULL;
 		nrc_mac_free_hw(g_hw);
 		g_hw = NULL;
 	}

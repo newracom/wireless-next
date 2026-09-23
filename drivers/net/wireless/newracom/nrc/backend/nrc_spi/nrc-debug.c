@@ -18,10 +18,8 @@
 #include "nrc-hif-cspi.h"
 #include "nrc-debug.h"
 
-/* Global debug variables - defined as module parameters in nrc-spi-params.c */
-extern unsigned long debug_mask;
-extern int debug_level;
-struct device *g_dev;
+/* Debug device for this layer; level and mask are module parameters in nrc-spi-params.c */
+struct device *nrc_debug_dev;
 
 #ifdef CONFIG_DEBUG_FS
 /* SPI debugfs root */
@@ -32,13 +30,13 @@ static struct dentry *nrc_spi_debugfs_root;
 /* SPI module debug mask control */
 static int nrc_spi_debugfs_debug_read(void *data, u64 *val)
 {
-	*val = debug_mask;
+	*val = nrc_debug_mask;
 	return 0;
 }
 
 static int nrc_spi_debugfs_debug_write(void *data, u64 val)
 {
-	debug_mask = val;
+	nrc_debug_mask = val;
 	return 0;
 }
 
@@ -48,14 +46,14 @@ DEFINE_SIMPLE_ATTRIBUTE(nrc_spi_debugfs_debug_fops, nrc_spi_debugfs_debug_read,
 /* SPI module debug level control */
 static int nrc_spi_debugfs_level_read(void *data, u64 *val)
 {
-	*val = debug_level;
+	*val = nrc_debug_level;
 	return 0;
 }
 
 static int nrc_spi_debugfs_level_write(void *data, u64 val)
 {
 	if (val < NRC_DBG_LEVEL_MAX)
-		debug_level = (enum NRC_DEBUG_LEVEL)val;
+		nrc_debug_level = (enum NRC_DEBUG_LEVEL)val;
 	return 0;
 }
 

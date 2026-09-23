@@ -34,17 +34,13 @@
 /* Forward declarations */
 struct mcp_priv;
 
-/* Global variables */
-extern unsigned long nrc_debug_mask;
-extern struct device *g_dev;
-
 /* MCP debug macros:
  * Module identity is provided by the kernel device prefix (e.g., "nrc-mcp:")
  * Use generic INFO/WARN/ERR from nrc-debug-common.h directly.
  */
 
 /* MCP Debug Functions */
-void nrc_init_debugfs(struct mcp_priv *mcp);
-void nrc_exit_debugfs(struct mcp_priv *mcp);
+void nrc_mcp_init_debugfs(struct mcp_priv *mcp);
+void nrc_mcp_exit_debugfs(struct mcp_priv *mcp);
 
 #endif /* _NRC_MCP_DEBUG_H_ */
