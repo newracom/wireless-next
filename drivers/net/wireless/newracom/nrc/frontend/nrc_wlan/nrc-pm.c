@@ -53,9 +53,7 @@
 
 int tx_h_sta_pm(struct nrc_trx_data *tx)
 {
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
 	struct ieee80211_hw *hw = tx->nw->hw;
-#endif
 	struct sk_buff *skb = tx->skb;
 	struct ieee80211_tx_info *txi = IEEE80211_SKB_CB(skb);
 	struct ieee80211_hdr *mh = (void *)skb->data;
@@ -98,15 +96,7 @@ static void nrc_mac_rx_fictitious_ps_poll_response(struct ieee80211_vif *vif)
 	struct ieee80211_hdr_3addr *nullfunc;
 	struct ieee80211_rx_status *status;
 
-#if KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 	skb = ieee80211_nullfunc_get(nw->hw, vif, vif->bss_conf.link_id, false);
-#else
-	skb = ieee80211_nullfunc_get(nw->hw, vif, false);
-#endif
-#else
-	skb = ieee80211_nullfunc_get(nw->hw, vif);
-#endif
 	if (!skb)
 		return;
 
@@ -221,11 +211,9 @@ static int ieee80211_disconnect_sta(struct ieee80211_vif *vif,
 	struct ieee80211_hw *hw = i_sta->nw->hw;
 	struct sk_buff *skb;
 	struct ieee80211_tx_info *txi;
-#ifdef CONFIG_SUPPORT_TX_CONTROL
 	struct ieee80211_tx_control control = {
 		.sta = sta,
 	};
-#endif
 
 	/* Send a deauth to @sta */
 	skb = ieee80211_deauth_get(hw, sta->addr, vif->addr, vif->addr,
@@ -239,11 +227,7 @@ static int ieee80211_disconnect_sta(struct ieee80211_vif *vif,
 	txi = IEEE80211_SKB_CB(skb);
 	txi->control.vif = vif;
 
-#ifdef CONFIG_SUPPORT_NEW_MAC_TX
 	nrc_mac_tx_process(hw, &control, skb, false);
-#else
-	nrc_mac_tx_process(hw, skb, false);
-#endif
 
 	/* Pretend to receive a deauth from @sta */
 	skb = ieee80211_deauth_get(hw, vif->addr, sta->addr, vif->addr,
@@ -258,17 +242,9 @@ static int ieee80211_disconnect_sta(struct ieee80211_vif *vif,
 	return 0;
 }
 
-#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
-static void ap_max_idle_period_expire(unsigned long data)
-#else
 static void ap_max_idle_period_expire(struct timer_list *t)
-#endif
 {
-#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
-	struct nrc_vif *i_vif = (struct nrc_vif *)data;
-#else
 	struct nrc_vif *i_vif = from_timer(i_vif, t, max_idle_timer);
-#endif
 	struct nrc_sta *i_sta = NULL, *tmp = NULL;
 	unsigned long flags;
 	u8 deauth_addr[BSS_MAX_IDLE_DEAUTH_BATCH][ETH_ALEN];
@@ -350,13 +326,8 @@ void ap_max_idle_timer_start(struct nrc *nw, struct nrc_vif *i_vif)
 {
 	if (!timer_pending(&i_vif->max_idle_timer)) {
 		DBG_STATE("vif(%d) Start AP bss_max_idle timer", i_vif->index);
-#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
-		setup_timer(&i_vif->max_idle_timer, ap_max_idle_period_expire,
-			    (unsigned long)i_vif);
-#else
 		timer_setup(&i_vif->max_idle_timer, ap_max_idle_period_expire,
 			    0);
-#endif
 		mod_timer(&i_vif->max_idle_timer,
 			  jiffies + msecs_to_jiffies(
 					    BSS_MAX_IDLE_TIMER_PERIOD_MS));
@@ -383,26 +354,14 @@ struct ieee80211_hdr_3addr_qos {
 	u16 qc;
 };
 
-#if KERNEL_VERSION(4, 15, 0) > NRC_TARGET_KERNEL_VERSION
-static void sta_max_idle_period_expire(unsigned long data)
-{
-	struct nrc_vif *i_vif = (struct nrc_vif *)data;
-#else
 static void sta_max_idle_period_expire(struct timer_list *t)
 {
 	struct nrc_vif *i_vif = from_timer(i_vif, t, max_idle_timer);
-#endif
 	struct ieee80211_hw *hw = i_vif->nw->hw;
 	struct nrc_sta *i_sta = NULL, *tmp = NULL, *tmp_sta = NULL;
 	unsigned long flags;
-#ifdef CONFIG_SUPPORT_TX_CONTROL
 	struct ieee80211_tx_control control;
-#endif
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
 	struct ieee80211_chanctx_conf *chanctx_conf;
-#else
-	struct ieee80211_conf *chanctx_conf;
-#endif
 	struct sk_buff *skb;
 	int band;
 	struct ieee80211_hdr_3addr_qos *qosnullfunc;
@@ -445,47 +404,23 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 
 	DBG_MAC("%s: sending a keep-alive (QoS Null Frame)", __func__);
 	/* Send a Null frame as a keep alive frame */
-#if KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 	skb = ieee80211_nullfunc_get(hw, i_sta->vif,
 				     i_sta->vif->bss_conf.link_id, false);
-#else
-	skb = ieee80211_nullfunc_get(hw, i_sta->vif, false);
-#endif
-#else
-	skb = ieee80211_nullfunc_get(hw, i_sta->vif);
-#endif
 	skb_put(skb, 2);
 	qosnullfunc = (struct ieee80211_hdr_3addr_qos *)skb->data;
 	qosnullfunc->frame_control |= cpu_to_le16(IEEE80211_STYPE_QOS_NULL);
 	qosnullfunc->qc = cpu_to_le16(7);
 	skb_set_queue_mapping(skb, IEEE80211_AC_VO);
 
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
-#ifdef CONFIG_USE_BSS_CHAN_CONF
 	chanctx_conf = rcu_dereference(i_sta->vif->bss_conf.chanctx_conf);
-#else
-	chanctx_conf = rcu_dereference(i_sta->vif->chanctx_conf);
-#endif /* ifdef CONFIG_USE_BSS_CHAN_CONF */
 	if (!chanctx_conf)
 		goto drop;
 
 	band = chanctx_conf->def.chan->band;
 	if (!ieee80211_tx_prepare_skb(hw, i_sta->vif, skb, band, NULL))
 		goto done;
-#else
-	chanctx_conf = &hw->conf;
-	if (!chanctx_conf)
-		goto drop;
 
-	band = chanctx_conf->channel->band;
-#endif
-
-#ifdef CONFIG_SUPPORT_NEW_MAC_TX
 	nrc_mac_tx_process(hw, &control, skb, true);
-#else
-	nrc_mac_tx_process(hw, skb, true);
-#endif
 
 done:
 #ifdef CONFIG_QOS_NULL_OFFLOAD
@@ -634,13 +569,8 @@ int sta_h_bss_max_idle_period(struct ieee80211_hw *hw,
 	if (vif->type == NL80211_IFTYPE_STATION) {
 		DBG_MAC("%s: vif(%d) Start STA bss_max_idle timer", __func__,
 			i_vif->index);
-#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
-		setup_timer(&i_vif->max_idle_timer, sta_max_idle_period_expire,
-			    (unsigned long)i_vif);
-#else
 		timer_setup(&i_vif->max_idle_timer, sta_max_idle_period_expire,
 			    0);
-#endif
 
 		/* Save jiffies (msecs_to_jiffies(max_idle_period * 1024ms(1000TU) + idle_offset) */
 		if (timeout_ms > __UINT32_MAX__)

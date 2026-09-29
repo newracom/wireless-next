@@ -10,7 +10,6 @@
 #include <linux/seq_file.h>
 #include <linux/math64.h>
 #include <linux/spi/spi.h>
-#include <linux/version.h>
 #include <linux/debugfs.h>
 
 /* Local module headers */
@@ -168,11 +167,6 @@ void nrc_spi_exit_debugfs(void)
 
 void nrc_spi_debug_info(struct spi_device *spi)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-	DBG_HIF("SPI device: bus=%d, cs=%d, max_speed=%u Hz",
-		spi->controller->bus_num, spi->chip_select, spi->max_speed_hz);
-#else
 	DBG_HIF("SPI device: bus=%d, cs=%d, max_speed=%u Hz",
 		spi->master->bus_num, spi->chip_select, spi->max_speed_hz);
-#endif
 }

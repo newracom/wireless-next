@@ -43,18 +43,8 @@
 
 static struct nrc *nrc_nw;
 
-#ifdef CONFIG_SUPPORT_NEW_NETLINK
-#ifdef CONFIG_SUPPORT_SPLIT_OPS_NETLINK
 static int nrc_nl_pre_doit(const struct genl_split_ops *ops,
 			   struct sk_buff *skb, struct genl_info *info)
-#else
-static int nrc_nl_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
-			   struct genl_info *info)
-#endif
-#else
-static int nrc_nl_pre_doit(struct genl_ops *ops, struct sk_buff *skb,
-			   struct genl_info *info)
-#endif
 {
 	struct nrc *nw = nrc_nw;
 	int ret = 0;
@@ -73,18 +63,8 @@ static int nrc_nl_pre_doit(struct genl_ops *ops, struct sk_buff *skb,
 	return ret;
 }
 
-#ifdef CONFIG_SUPPORT_NEW_NETLINK
-#ifdef CONFIG_SUPPORT_SPLIT_OPS_NETLINK
 static void nrc_nl_post_doit(const struct genl_split_ops *ops,
 			     struct sk_buff *skb, struct genl_info *info)
-#else
-static void nrc_nl_post_doit(const struct genl_ops *ops, struct sk_buff *skb,
-			     struct genl_info *info)
-#endif
-#else
-static void nrc_nl_post_doit(struct genl_ops *ops, struct sk_buff *skb,
-			     struct genl_info *info)
-#endif
 {
 	struct nrc *nw = nrc_nw;
 
@@ -190,27 +170,18 @@ static const struct genl_multicast_group nl_umac_mcast_grps[] = {
 };
 
 static struct genl_family nrc_nl_fam = {
-	.id = GENL_ID_GENERATE,
 	.hdrsize = 0,
 	.name = NRC_NETLINK_FAMILY_NAME,
 	.version = 1,
 	.maxattr = MAX_NL_WFA_CAPI_ATTR,
-#if KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION
 	.policy = nl_umac_policy,
-#endif
-#ifdef CONFIG_SUPPORT_NEW_NETLINK
 	.parallel_ops = false,
-#endif
 	.netnsok = false,
 	.pre_doit = nrc_nl_pre_doit,
 	.post_doit = nrc_nl_post_doit,
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
 	.mcgrps = nl_umac_mcast_grps,
 	.n_mcgrps = ARRAY_SIZE(nl_umac_mcast_grps),
-#endif
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 	.resv_start_op = NL_APF_GET_PACKET_FILTER + 1,
-#endif
 };
 
 int nrc_netlink_rx(struct nrc *nw, struct sk_buff *skb, u8 subtype)
@@ -218,11 +189,7 @@ int nrc_netlink_rx(struct nrc *nw, struct sk_buff *skb, u8 subtype)
 	struct sk_buff *mcast_skb;
 	void *data;
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	mcast_skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
-#else
-	mcast_skb = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-#endif
 
 	if (!mcast_skb)
 		return -1;
@@ -240,12 +207,8 @@ int nrc_netlink_rx(struct nrc *nw, struct sk_buff *skb, u8 subtype)
 	nla_put_u8(mcast_skb, NL_CMD_LOG_TYPE, subtype);
 	genlmsg_end(mcast_skb, data);
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	genlmsg_multicast(&nrc_nl_fam, mcast_skb, 0, NL_MCGRP_NRC_LOG,
 			  GFP_KERNEL);
-#else
-	genlmsg_multicast(mcast_skb, 0, NL_MCGRP_NRC_LOG, GFP_KERNEL);
-#endif
 
 	/* Track RX SKB free (LOG type from backend) */
 	NRC_SKB_TRACK_FREE(nw->hdev, skb, HIF_TYPE_WIM, true, false);
@@ -258,11 +221,7 @@ int nrc_netlink_trigger_recovery(struct nrc *nw)
 	struct sk_buff *mcast_skb;
 	void *data;
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	mcast_skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
-#else
-	mcast_skb = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-#endif
 
 	if (!mcast_skb)
 		return -1;
@@ -275,12 +234,8 @@ int nrc_netlink_trigger_recovery(struct nrc *nw)
 	nla_put_string(mcast_skb, NL_CMD_RECOVERY_MSG, "recovery");
 	genlmsg_end(mcast_skb, data);
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	genlmsg_multicast(&nrc_nl_fam, mcast_skb, 0, NL_MCGRP_NRC_LOG,
 			  GFP_KERNEL);
-#else
-	genlmsg_multicast(mcast_skb, 0, NL_MCGRP_NRC_LOG, GFP_KERNEL);
-#endif
 
 	return 0;
 }
@@ -290,19 +245,11 @@ static int capi_sta_reply(int id, struct genl_info *info, const char *response)
 	struct sk_buff *msg;
 	void *hdr;
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, id);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, id);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -333,19 +280,11 @@ static int halow_reply(int id, struct genl_info *info, const char *response)
 	struct sk_buff *msg;
 	void *hdr;
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, id);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, id);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -373,19 +312,11 @@ static int capi_sta_get_info(struct sk_buff *skb, struct genl_info *info)
 
 	DBG_CAPI("%s()", __func__);
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam, 0,
 			  NL_WFA_CAPI_STA_GET_INFO);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam, 0,
-			  NL_WFA_CAPI_STA_GET_INFO);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -424,19 +355,11 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 	 * Bound the copy by the destination buffer size, not the
 	 * caller-supplied source length, and reject a truncated value.
 	 */
-#if KERNEL_VERSION(5, 11, 0) <= NRC_TARGET_KERNEL_VERSION
 	if (nla_strscpy(param_name, info->attrs[NL_HALOW_PARAM_NAME],
 			sizeof(param_name)) < 0 ||
 	    nla_strscpy(str_value, info->attrs[NL_HALOW_PARAM_STR_VAL],
 			sizeof(str_value)) < 0)
 		return -EINVAL;
-#else
-	if (nla_strlcpy(param_name, info->attrs[NL_HALOW_PARAM_NAME],
-			sizeof(param_name)) >= sizeof(param_name) ||
-	    nla_strlcpy(str_value, info->attrs[NL_HALOW_PARAM_STR_VAL],
-			sizeof(str_value)) >= sizeof(str_value))
-		return -EINVAL;
-#endif
 
 	DBG_CAPI("%s(name:\"%s\",val:\"%s\")", __func__, param_name, str_value);
 
@@ -572,11 +495,7 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 			int band;
 			struct sk_buff *b;
 			struct ieee80211_vif *vif = nrc_nw->vif[0];
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
 			struct ieee80211_chanctx_conf *chanctx_conf;
-#else
-			struct ieee80211_conf *chanctx_conf;
-#endif
 			struct ieee80211_tx_control control;
 
 			if (!vif)
@@ -585,16 +504,8 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 			rcu_read_lock();
 			control.sta =
 				ieee80211_find_sta(vif, vif->bss_conf.bssid);
-#if KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 			b = ieee80211_nullfunc_get(
 				nrc_nw->hw, vif, vif->bss_conf.link_id, false);
-#else
-			b = ieee80211_nullfunc_get(nrc_nw->hw, vif, false);
-#endif
-#else
-			b = ieee80211_nullfunc_get(nrc_nw->hw, vif);
-#endif
 			if (!b) {
 				rcu_read_unlock();
 				goto halow_not_supported;
@@ -603,13 +514,8 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 			NRC_SKB_TRACK_ALLOC(nrc_nw->hdev, b, HIF_TYPE_FRAME,
 					    false, false);
 			skb_set_queue_mapping(b, IEEE80211_AC_VO);
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
-#ifdef CONFIG_USE_BSS_CHAN_CONF
 			chanctx_conf =
 				rcu_dereference(vif->bss_conf.chanctx_conf);
-#else
-			chanctx_conf = rcu_dereference(vif->chanctx_conf);
-#endif /* ifdef CONFIG_USE_BSS_CHAN_CONF */
 			if (!chanctx_conf) {
 				rcu_read_unlock();
 				NRC_SKB_TRACK_FREE(nrc_nw->hdev, b,
@@ -627,10 +533,6 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 						   false);
 				goto halow_not_supported;
 			}
-#else
-			chanctx_conf = &nrc_nw->hw->conf;
-			band = chanctx_conf->channel->band;
-#endif
 			nrc_hal_ops_xmit_wlan_frame(
 				hw_vifindex(vif),
 				(!!control.sta ? control.sta->aid : 0), b);
@@ -719,19 +621,11 @@ static int capi_sta_set_11n(struct sk_buff *skb, struct genl_info *info)
 	 * Bound the copy by the destination buffer size, not the
 	 * caller-supplied source length, and reject a truncated value.
 	 */
-#if KERNEL_VERSION(5, 11, 0) <= NRC_TARGET_KERNEL_VERSION
 	if (nla_strscpy(param_name, info->attrs[NL_WFA_CAPI_PARAM_NAME],
 			sizeof(param_name)) < 0 ||
 	    nla_strscpy(str_value, info->attrs[NL_WFA_CAPI_PARAM_STR_VAL],
 			sizeof(str_value)) < 0)
 		return -EINVAL;
-#else
-	if (nla_strlcpy(param_name, info->attrs[NL_WFA_CAPI_PARAM_NAME],
-			sizeof(param_name)) >= sizeof(param_name) ||
-	    nla_strlcpy(str_value, info->attrs[NL_WFA_CAPI_PARAM_STR_VAL],
-			sizeof(str_value)) >= sizeof(str_value))
-		return -EINVAL;
-#endif
 
 	DBG_CAPI("%s(name:\"%s\",val:\"%s\")", __func__, param_name, str_value);
 
@@ -924,11 +818,7 @@ static void capi_send_addba(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	rcu_read_lock();
 	if (vif->type == NL80211_IFTYPE_STATION) {
-#ifdef CONFIG_USE_VIF_CFG
 		if (!vif->cfg.assoc)
-#else
-		if (!vif->bss_conf.assoc)
-#endif
 			goto out;
 
 		if (c->addr && !ether_addr_equal(c->addr, vif->bss_conf.bssid))
@@ -990,13 +880,8 @@ static int capi_sta_send_addba(struct sk_buff *skb, struct genl_info *info)
 
 	DBG_CAPI("%s(%d,%pM)", __func__, param.tid, param.addr);
 
-#ifdef CONFIG_SUPPORT_ITERATE_INTERFACE
 	ieee80211_iterate_active_interfaces(nrc_nw->hw, 0, capi_send_addba,
 					    &param);
-#else
-	ieee80211_iterate_active_interfaces(nrc_nw->hw, capi_send_addba,
-					    &param);
-#endif
 	if (!param.done)
 		ERR("WFA_CAPI: failed to send ADDBA");
 
@@ -1015,11 +900,7 @@ static void capi_send_delba(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	rcu_read_lock();
 	if (vif->type == NL80211_IFTYPE_STATION) {
-#ifdef CONFIG_USE_VIF_CFG
 		if (!vif->cfg.assoc)
-#else
-		if (!vif->bss_conf.assoc)
-#endif
 			goto out;
 
 		if (c->addr && !ether_addr_equal(c->addr, vif->bss_conf.bssid))
@@ -1075,13 +956,8 @@ static int capi_sta_send_delba(struct sk_buff *skb, struct genl_info *info)
 
 	DBG_CAPI("%s(%d,%pM)", __func__, param.tid, param.addr);
 
-#ifdef CONFIG_SUPPORT_ITERATE_INTERFACE
 	ieee80211_iterate_active_interfaces(nrc_nw->hw, 0, capi_send_delba,
 					    &param);
-#else
-	ieee80211_iterate_active_interfaces(nrc_nw->hw, capi_send_delba,
-					    &param);
-#endif
 	if (!param.done)
 		ERR("WFA_CAPI: failed to send DELBA");
 
@@ -1261,21 +1137,13 @@ static void generate_mmic_error(void *data, u8 *mac, struct ieee80211_vif *vif)
 	struct ieee80211_hdr *hdr;
 	struct nrc_vif *i_vif;
 	struct nrc *nw;
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
 	struct ieee80211_chanctx_conf *chan;
-#else
-	struct ieee80211_conf *chan;
-#endif
 	u64 now = 0, diff = 0;
 
 	i_vif = to_i_vif(vif);
 	nw = i_vif->nw;
 
-#ifdef CONFIG_USE_VIF_CFG
 	if (vif->type != NL80211_IFTYPE_STATION || !vif->cfg.assoc)
-#else
-	if (vif->type != NL80211_IFTYPE_STATION || !vif->bss_conf.assoc)
-#endif
 		return;
 
 	if (c->addr && !ether_addr_equal(c->addr, vif->bss_conf.bssid))
@@ -1308,12 +1176,7 @@ static void generate_mmic_error(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	rx_status = IEEE80211_SKB_RXCB(skb);
 
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
-#ifdef CONFIG_USE_BSS_CHAN_CONF
 	chan = rcu_dereference(vif->bss_conf.chanctx_conf);
-#else
-	chan = rcu_dereference(vif->chanctx_conf);
-#endif /* ifdef CONFIG_USE_BSS_CHAN_CONF */
 	if (!chan) {
 		/* Track error path SKB free (RX path - keepalive) */
 		NRC_SKB_TRACK_FREE(nw->hdev, skb, HIF_TYPE_FRAME, true, false);
@@ -1322,14 +1185,6 @@ static void generate_mmic_error(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	rx_status->freq = chan->def.chan->center_freq;
 	rx_status->band = chan->def.chan->band;
-#else
-	chan = &nrc_nw->hw->conf;
-	if (!chan)
-		goto out;
-
-	rx_status->freq = chan->channel->center_freq;
-	rx_status->band = chan->channel->band;
-#endif
 	rx_status->flag = (RX_FLAG_DECRYPTED | RX_FLAG_MMIC_STRIPPED |
 			   RX_FLAG_MMIC_ERROR);
 
@@ -1364,13 +1219,8 @@ static int test_mmic_failure(struct sk_buff *skb, struct genl_info *info)
 
 	DBG_CAPI("%s(%d,%pM)", __func__, param.tid, param.addr);
 
-#ifdef CONFIG_SUPPORT_ITERATE_INTERFACE
 	ieee80211_iterate_active_interfaces(nrc_nw->hw, 0, generate_mmic_error,
 					    &param);
-#else
-	ieee80211_iterate_active_interfaces(nrc_nw->hw, generate_mmic_error,
-					    &param);
-#endif
 
 	if (!param.done)
 		ERR("WFA_CAPI: failed to generate MMIC failure");
@@ -1536,19 +1386,11 @@ static int nrc_shell_run(struct sk_buff *skb, struct genl_info *info)
 		return -EIO;
 	}
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, NL_SHELL_RUN_CMD);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, NL_SHELL_RUN_CMD);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -1653,19 +1495,11 @@ static int nrc_shell_run_raw(struct sk_buff *skb, struct genl_info *info)
 		return -EIO;
 	}
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, NL_SHELL_RUN_CMD_RAW);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, NL_SHELL_RUN_CMD);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -1765,19 +1599,11 @@ static int cli_app_get_info(struct sk_buff *skb, struct genl_info *info)
 		return -EIO;
 	}
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, NL_SHELL_RUN_CMD);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, NL_SHELL_RUN_CMD);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -1902,19 +1728,11 @@ static int cli_app_driver_cmd(struct sk_buff *skb, struct genl_info *info)
 		return -EIO;
 	}
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, NL_CLI_APP_DRIVER_CMD);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, NL_CLI_APP_DRIVER_CMD);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -2029,19 +1847,11 @@ static int nl_apf_set_enable(struct sk_buff *skb, struct genl_info *info)
 		return -EIO;
 	}
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, NL_APF_SET_ENABLE);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, NL_APF_SET_ENABLE);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -2083,19 +1893,11 @@ static int nl_apf_get_enable(struct sk_buff *skb, struct genl_info *info)
 		return -EIO;
 	}
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, NL_APF_GET_ENABLE);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, NL_APF_GET_ENABLE);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -2130,19 +1932,11 @@ static int nl_apf_get_cap(struct sk_buff *skb, struct genl_info *info)
 		return -EIO;
 	}
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, NL_APF_GET_CAPABILITIES);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, NL_APF_GET_CAPABILITIES);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -2191,19 +1985,11 @@ static int nl_apf_set_filter(struct sk_buff *skb, struct genl_info *info)
 		return -EIO;
 	}
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, NL_APF_SET_PACKET_FILTER);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, NL_APF_SET_PACKET_FILTER);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -2271,19 +2057,11 @@ static int nl_apf_get_filter(struct sk_buff *skb, struct genl_info *info)
 		return -EIO;
 	}
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	msg = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nrc_nl_fam,
 			  0 /*no flags*/, NL_APF_GET_PACKET_FILTER);
-#else
-	msg = genlmsg_new(NLMSG_DEFAULT_SIZE - GENL_HDRLEN, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-	hdr = genlmsg_put(msg, info->snd_pid, info->snd_seq, &nrc_nl_fam,
-			  0 /*no flags*/, NL_APF_GET_PACKET_FILTER);
-#endif
 	if (!hdr) {
 		nlmsg_free(msg);
 		return -EMSGSIZE;
@@ -2580,24 +2358,13 @@ static int nrc_auto_ba_toggle(struct sk_buff *skb, struct genl_info *info)
 	return 0;
 }
 
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 static const struct genl_ops nl_umac_nl_ops[] = {
-#else
-static struct genl_ops nl_umac_nl_ops[] = {
-#endif
 #if defined(DEBUG)
 	{
 		.cmd = NL_WFA_CAPI_STA_GET_INFO,
 		.doit = capi_sta_get_info,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-	.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 #if defined(DEBUG)
@@ -2605,57 +2372,29 @@ static struct genl_ops nl_umac_nl_ops[] = {
 		.cmd = NL_WFA_CAPI_STA_SET_11N,
 		.doit = capi_sta_set_11n,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 	{
 		.cmd = NL_WFA_CAPI_SEND_ADDBA,
 		.doit = capi_sta_send_addba,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 	{
 		.cmd = NL_WFA_CAPI_SEND_DELBA,
 		.doit = capi_sta_send_delba,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #if defined(DEBUG)
 	{
 		.cmd = NL_WFA_CAPI_BSS_MAX_IDLE,
 		.doit = capi_bss_max_idle,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 #if defined(DEBUG)
@@ -2663,14 +2402,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 		.cmd = NL_WFA_CAPI_BSS_MAX_IDLE_OFFSET,
 		.doit = capi_bss_max_idle_offset,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 #if defined(DEBUG)
@@ -2678,42 +2410,21 @@ static struct genl_ops nl_umac_nl_ops[] = {
 		.cmd = NL_TEST_MMIC_FAILURE,
 		.doit = test_mmic_failure,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 	{
 		.cmd = NL_SHELL_RUN,
 		.doit = nrc_shell_run,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #if defined(DEBUG)
 	{
 		.cmd = NL_SHELL_RUN_SIMPLE,
 		.doit = nrc_shell_run_simple,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 #if defined(DEBUG)
@@ -2721,14 +2432,7 @@ static struct genl_ops nl_umac_nl_ops[] = {
 		.cmd = NL_MGMT_FRAME_INJECTION,
 		.doit = nrc_inject_mgmt_frame,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 #if defined(DEBUG)
@@ -2736,122 +2440,59 @@ static struct genl_ops nl_umac_nl_ops[] = {
 		.cmd = NL_HALOW_SET_DUT,
 		.doit = halow_set_dut,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 	{
 		.cmd = NL_CLI_APP_GET_INFO,
 		.doit = cli_app_get_info,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 		.internal_flags = NRC_FLAG_NO_NEED_PS,
 	},
 	{
 		.cmd = NL_CLI_APP_DRIVER,
 		.doit = cli_app_driver_cmd,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 		.internal_flags = NRC_FLAG_NO_NEED_PS,
 	},
 	{
 		.cmd = NL_APF_SET_ENABLE,
 		.doit = nl_apf_set_enable,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 	{
 		.cmd = NL_APF_GET_ENABLE,
 		.doit = nl_apf_get_enable,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 	{
 		.cmd = NL_APF_GET_CAPABILITIES,
 		.doit = nl_apf_get_cap,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 	{
 		.cmd = NL_APF_SET_PACKET_FILTER,
 		.doit = nl_apf_set_filter,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 	{
 		.cmd = NL_APF_GET_PACKET_FILTER,
 		.doit = nl_apf_get_filter,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #if defined(DEBUG)
 	{
 		.cmd = NL_MIC_SCAN,
 		.doit = nrc_mic_scan,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 #if defined(DEBUG)
@@ -2859,67 +2500,32 @@ static struct genl_ops nl_umac_nl_ops[] = {
 		.cmd = NL_FRAME_INJECTION,
 		.doit = nrc_inject_frame,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 #endif /* DEBUG */
 	{
 		.cmd = NL_SET_IE,
 		.doit = nrc_set_ie,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 	{
 		.cmd = NL_SET_SAE_DATA,
 		.doit = nrc_set_sae,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 	{
 		.cmd = NL_SHELL_RUN_RAW,
 		.doit = nrc_shell_run_raw,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 	{
 		.cmd = NL_AUTO_BA_TOGGLE,
 		.doit = nrc_auto_ba_toggle,
 		.flags = GENL_ADMIN_PERM,
-#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && \
-	NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-#else
-		.policy = nl_umac_policy,
-#endif
 	},
 };
 
@@ -2941,19 +2547,9 @@ int nrc_netlink_init(struct nrc *nw)
 
 	nrc_nw = nw;
 
-#if KERNEL_VERSION(4, 10, 0) <= NRC_TARGET_KERNEL_VERSION
 	nrc_nl_fam.ops = nl_umac_nl_ops;
 	nrc_nl_fam.n_ops = ARRAY_SIZE(nl_umac_nl_ops);
 	rc = genl_register_family(&nrc_nl_fam);
-#else
-#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
-	rc = genl_register_family_with_ops_groups(&nrc_nl_fam, nl_umac_nl_ops,
-						  nl_umac_mcast_grps);
-#else
-	rc = genl_register_family_with_ops(&nrc_nl_fam, nl_umac_nl_ops,
-					   ARRAY_SIZE(nl_umac_nl_ops));
-#endif
-#endif
 
 	if (rc) {
 		ERR("genl_register_family() is failed (%d).", rc);

@@ -44,27 +44,6 @@
  * Current PS architecture uses nrc_wim_set_ps() which sends WIM_CMD_SET + WIM_TLV_PS_ENABLE.
  * This format is never generated in current codebase. - 2025-12-02
  */
-#if 0
-static bool nrc_hif_sleep_find(struct sk_buff *skb, u32 *duration_ms)
-{
-	struct hif *hif = (void *)skb->data;
-	struct wim *wim = (void *)(hif + 1);
-	struct wim_sleep_duration *sleep_duration = (void *)(wim + 1);
-
-	if ((hif->type != HIF_TYPE_WIM) ||
-	    (hif->subtype != HIF_WIM_SUB_REQUEST)) {
-		return false;
-	}
-
-	if (wim->cmd == WIM_CMD_SLEEP &&
-	    sleep_duration->h.type == WIM_TLV_SLEEP_DURATION) {
-		*duration_ms = sleep_duration->v.sleep_ms;
-		return true;
-	}
-
-	return false;
-}
-#endif
 
 /**
  * nrc_hif_update_loopback_debug_time - Update loopback debug timing information
@@ -258,10 +237,6 @@ static struct sk_buff *nrc_hif_dequeue_wlan_skb(struct nrc_hif_device *hdev,
 	}
 
 	/* Frame queue */
-#ifndef CONFIG_USE_TXQ
-	if (NRC_DRV_IS_ASLEEP(hdev))
-		return NULL;
-#endif
 	/* Yield to WIM if pending (unless PS sleeping) */
 	if (nrc_hif_check_wim_priority(hdev, hdev->queue)) {
 		if (*skb_frame) {

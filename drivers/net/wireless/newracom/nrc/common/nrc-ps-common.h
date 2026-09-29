@@ -139,9 +139,8 @@ typedef struct {
 	int timeout; // hw->conf.dynamic_ps_timeout
 	/*
 	 * Driver-managed dynamic PS flag (mirrors ieee80211 SUPPORTS_DYNAMIC_PS)
-	 * Set when:
-	 * - Kernel < 6.0 AND nullfunc_enable=0, OR
-	 * - NonTIM mode (NRC_PS_DEEPSLEEP_NONTIM)
+	 * Set for every PS mode (NRC_PS_PER_MODE_DYN restricts it to deep-sleep
+	 * modes).
 	 * When set, driver uses its own timer for PS management instead of mac80211.
 	 */
 	bool supports_dynamic_ps;

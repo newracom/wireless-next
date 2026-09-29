@@ -6,9 +6,6 @@
 #include "nrc-country.h"
 #include "nrc-wim-types.h"
 #include <linux/types.h>
-#if KERNEL_VERSION(5, 18, 0) > NRC_TARGET_KERNEL_VERSION
-#include <stddef.h>
-#endif
 
 /* Supported proxy↔S1G channel list (owned by Frontend / S1G layer) */
 #define NRC_BD_MAX_CH_LIST 70

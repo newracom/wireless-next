@@ -6,10 +6,7 @@
 /* Linux kernel headers */
 #include <linux/kernel.h>
 #include <linux/ktime.h>
-#include <linux/version.h>
-#if KERNEL_VERSION(4, 8, 16) < LINUX_VERSION_CODE
 #include <linux/bitfield.h>
-#endif
 
 /* Linux networking headers */
 #include <net/mac80211.h>
@@ -24,7 +21,6 @@
 #include "nrc-debug.h"
 
 /* Local module headers */
-#include "compat.h"
 #include "nrc-mac80211-twt.h"
 #include "nrc-twt-sched.h"
 #include "nrc-hal-core-interface.h"

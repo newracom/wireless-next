@@ -16,7 +16,7 @@
  * @gpio: GPIO number (for legacy API)
  * @label: Label for the GPIO request
  *
- * Returns: GPIO descriptor pointer for 6.6+, 0 for success on older kernels, negative error code on failure
+ * Returns: GPIO descriptor pointer on success, ERR_PTR() on failure
  */
 struct gpio_desc *nrc_gpio_request(unsigned gpio, const char *label);
 

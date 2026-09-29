@@ -972,9 +972,7 @@ static bool nrc_hal_process_wim_event(struct nrc_hif_device *hdev,
 		break;
 
 	case WIM_EVENT_CREDIT_REPORT:
-#ifdef CONFIG_USE_TXQ
 		nrc_wim_update_tx_credit(hdev, wim);
-#endif
 		consumed = true;
 		break;
 

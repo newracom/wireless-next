@@ -19,26 +19,6 @@
 #define NRC_MAC80211_ROC_DURATION (1000)
 #define NRC_MAC80211_RCU_LOCK_THRESHOLD (1000)
 
-#ifdef CONFIG_SUPPORT_TX_CONTROL
-#else
-struct ieee80211_tx_control {
-	struct ieee80211_sta *sta;
-};
-#endif
-
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
-#else
-#define NL80211_IFTYPE_P2P_DEVICE 10
-#define WLAN_EID_BSS_MAX_IDLE_PERIOD 90
-
-struct ieee80211_scan_ies {
-	const u8 *ies[IEEE80211_NUM_BANDS];
-	size_t len[IEEE80211_NUM_BANDS];
-	const u8 *common_ies;
-	size_t common_ie_len;
-};
-#endif
-
 struct wim_event_work {
 	struct work_struct work;
 	struct nrc *nw;
@@ -72,49 +52,21 @@ void beacon_loss_check_work_handler(struct work_struct *work);
 
 struct net_device *nrc_get_intf_by_name(const char *intf_name);
 
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
 void nrc_mac_tx_process(struct ieee80211_hw *hw,
 			struct ieee80211_tx_control *control,
 			struct sk_buff *skb, bool from_mac80211);
-#else
-void nrc_mac_tx_process(struct ieee80211_hw *hw, struct sk_buff *skb,
-			bool from_mac80211);
-#endif
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
-#ifdef CONFIG_USE_LINK_ID
 int nrc_mac_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		    unsigned int link_id, u16 ac,
 		    const struct ieee80211_tx_queue_params *params);
-#else
-int nrc_mac_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif, u16 ac,
-		    const struct ieee80211_tx_queue_params *params);
-#endif /* ifdef CONFIG_USE_LINK_ID */
-#else
-int nrc_mac_conf_tx(struct ieee80211_hw *hw, u16 ac,
-		    const struct ieee80211_tx_queue_params *params);
-#endif
 void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 			      struct ieee80211_vif *vif,
 			      struct ieee80211_bss_conf *info,
-#if KERNEL_VERSION(6, 0, 0) <= NRC_TARGET_KERNEL_VERSION
 			      u64 changed);
-#else
-			      u32 changed);
-#endif
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
 void nrc_mac_add_tlv_channel(struct sk_buff *skb,
 			     struct cfg80211_chan_def *chandef);
-#else
-void nrc_mac_add_tlv_channel(struct sk_buff *skb,
-			     struct ieee80211_conf *chandef);
-#endif
 int nrc_mac_sta_remove(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		       struct ieee80211_sta *sta);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 9, 0)
-void nrc_mac_stop(struct ieee80211_hw *hw, bool suspend);
-#else
 void nrc_mac_stop(struct ieee80211_hw *hw);
-#endif
 
 int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb);
 void dump_mgmt_frame(struct ieee80211_hdr *hdr, int direction);
@@ -149,21 +101,10 @@ void nrc_mac_roc_finish(struct work_struct *work);
 void nrc_rm_vendor_ie_wowlan_pattern(struct work_struct *work);
 void nrc_vcmd_backup_set_wdt_flag(u8 vif_id);
 
-#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
-void nrc_probe_timer(unsigned long data);
-void nrc_bcn_mon_timer(unsigned long data);
-#else
 void nrc_probe_timer(struct timer_list *t);
 void nrc_bcn_mon_timer(struct timer_list *t);
-#endif
-#ifdef CONFIG_NEW_TASKLET_API
 void nrc_tx_tasklet(struct tasklet_struct *t);
-#else
-void nrc_tx_tasklet(unsigned long cookie);
-#endif
-#ifdef CONFIG_USE_TXQ
 void nrc_cleanup_txq_all(struct nrc *nw);
-#endif
 void nrc_cleanup_txq(struct nrc *nw, struct ieee80211_txq *txq);
 void nrc_cleanup_txq_by_macaddr(struct nrc *nw, struct ieee80211_vif *vif,
 				uint8_t *macaddr);

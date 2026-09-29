@@ -130,9 +130,7 @@ int nrc_ps_set_mode(struct nrc *nw, enum NRC_PS_MODE mode, u64 timeout,
 
 	ieee80211_stop_queues(hw);
 
-#ifdef CONFIG_USE_TXQ
 	nrc_cleanup_txq_all(nw);
-#endif
 
 	/* Request sleep via HAL (handles state machine + HW ops) */
 	ret = nrc_hal_ops_ps_request_sleep(mode, timeout, wowlan, reason);
@@ -267,15 +265,9 @@ static void nrc_ps_dynamic_work(struct work_struct *work)
 }
 
 /* Timer callback - runs in atomic context, just schedules work */
-#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
-static void nrc_ps_timeout_timer(unsigned long data)
-{
-	struct nrc *nw = (struct nrc *)data;
-#else
 static void nrc_ps_timeout_timer(struct timer_list *t)
 {
 	struct nrc *nw = from_timer(nw, t, dynamic_ps_timer);
-#endif
 	/* Schedule work to handle PS in process context */
 	schedule_work(&nw->dynamic_ps_work);
 }
@@ -290,12 +282,7 @@ void nrc_ps_dyn_init(struct nrc *nw)
 	/* Initialize work queue for dynamic PS */
 	INIT_WORK(&nw->dynamic_ps_work, nrc_ps_dynamic_work);
 
-#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
-	setup_timer(&nw->dynamic_ps_timer, nrc_ps_timeout_timer,
-		    (unsigned long)nw);
-#else
 	timer_setup(&nw->dynamic_ps_timer, nrc_ps_timeout_timer, 0);
-#endif
 }
 
 void nrc_ps_dyn_deinit(struct nrc *nw)

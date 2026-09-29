@@ -231,11 +231,7 @@ static int nrc_hal_probe(struct platform_device *pdev)
  * Platform driver remove function
  * Called when platform device is removed
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
-static void nrc_hal_remove(struct platform_device *pdev)
-#else
 static int nrc_hal_remove(struct platform_device *pdev)
-#endif
 {
 	struct nrc_hif_device *hdev = platform_get_drvdata(pdev);
 
@@ -274,9 +270,7 @@ static int nrc_hal_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 
 	INFO("NRC HAL platform driver removed\n");
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
 	return 0;
-#endif
 }
 
 /* ===========================================================================

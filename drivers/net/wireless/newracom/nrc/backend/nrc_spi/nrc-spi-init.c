@@ -224,14 +224,8 @@ err_cspi_free:
 /**
  * nrc_cspi_remove - SPI device remove function
  * @spi: SPI device to remove
- *
- * Returns: 0 on older kernels, void on newer kernels
  */
-#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5, 18, 0)
-static int nrc_cspi_remove(struct spi_device *spi)
-#else
 static void nrc_cspi_remove(struct spi_device *spi)
-#endif
 {
 	struct nrc_spi_priv *priv;
 
@@ -249,11 +243,7 @@ static void nrc_cspi_remove(struct spi_device *spi)
 	priv = spi_get_drvdata(spi);
 	if (!priv) {
 		WARN_SPI("SPI device data is NULL");
-#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5, 18, 0)
-		return 0;
-#else
 		return;
-#endif
 	}
 
 	/* Force IRQ cleanup if the frontend was not stopped first (e.g. SPI
@@ -290,9 +280,6 @@ static void nrc_cspi_remove(struct spi_device *spi)
 	nrc_cspi_free(priv);
 
 	INFO("NRC SPI device removed successfully");
-#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5, 18, 0)
-	return 0;
-#endif
 }
 
 /* For reboot or halt */
@@ -396,6 +383,3 @@ module_exit(nrc_cspi_exit);
 MODULE_AUTHOR("Newracom, Inc.(http://www.newracom.com)");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("Newracom 802.11 driver");
-#if KERNEL_VERSION(5, 12, 0) > NRC_TARGET_KERNEL_VERSION
-MODULE_SUPPORTED_DEVICE("Newracom 802.11 devices");
-#endif

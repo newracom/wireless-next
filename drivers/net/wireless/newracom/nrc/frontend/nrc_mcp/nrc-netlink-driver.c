@@ -6,7 +6,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/netlink.h>
-#include <linux/version.h>
 #include <linux/mutex.h>
 #include <net/sock.h>
 #include <net/netlink.h>
@@ -533,9 +532,6 @@ static int init_family(int id)
 	ops[OPS_REQUEST].flags = GENL_ADMIN_PERM;
 	ops[OPS_REQUEST].policy = nrc_policy;
 
-#if KERNEL_VERSION(6, 2, 0) <= LINUX_VERSION_CODE
-/* Kernel 6.2+ has validate field and resv_start_op */
-#if KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE
 	if (ops[OPS_INIT].cmd >= family->resv_start_op) {
 		ops[OPS_INIT].validate = 0;
 		ops[OPS_REQUEST].validate = 0;
@@ -545,15 +541,6 @@ static int init_family(int id)
 		ops[OPS_REQUEST].validate = GENL_DONT_VALIDATE_STRICT |
 					    GENL_DONT_VALIDATE_DUMP;
 	}
-#else
-	ops[OPS_INIT].validate = GENL_DONT_VALIDATE_STRICT |
-				 GENL_DONT_VALIDATE_DUMP;
-	ops[OPS_REQUEST].validate = GENL_DONT_VALIDATE_STRICT |
-				    GENL_DONT_VALIDATE_DUMP;
-#endif
-#else
-	/* Kernel 6.1 and earlier don't have validate field */
-#endif
 
 	info->id = id;
 

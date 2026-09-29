@@ -36,7 +36,6 @@
 /* WLAN module trace system (declarations only) */
 
 /* Local module headers */
-#include "compat.h"
 #include "nrc-mac80211.h"
 #include "nrc-mac80211-twt.h"
 #include "nrc-stats.h"
@@ -210,14 +209,9 @@ static void nrc_debug_print_frame(struct ieee80211_hdr *hdr,
  * @skb: the skb
  */
 
-#ifdef CONFIG_SUPPORT_NEW_MAC_TX
 void nrc_mac_tx_process(struct ieee80211_hw *hw,
 			struct ieee80211_tx_control *control,
 			struct sk_buff *skb, bool from_mac80211)
-#else
-void nrc_mac_tx_process(struct ieee80211_hw *hw, struct sk_buff *skb,
-			bool from_mac80211)
-#endif
 {
 	struct ieee80211_tx_info *txi = IEEE80211_SKB_CB(skb);
 	const struct nrc_trx_handler *h;
@@ -226,11 +220,7 @@ void nrc_mac_tx_process(struct ieee80211_hw *hw, struct sk_buff *skb,
 	struct nrc_trx_data tx = {
 		.nw = hw->priv,
 		.vif = txi->control.vif,
-#ifdef CONFIG_SUPPORT_TX_CONTROL
 		.sta = control->sta,
-#else
-		.sta = txi->control.sta,
-#endif
 		.skb = skb,
 		.result = 0,
 	};
@@ -248,9 +238,7 @@ void nrc_mac_tx_process(struct ieee80211_hw *hw, struct sk_buff *skb,
 		NRC_SKB_TRACK_ALLOC(hdev, skb, HIF_TYPE_FRAME, false, true);
 	}
 
-#ifdef CONFIG_USE_TXQ /* Here is not data frame */
 	nrc_debug_print_frame(mh, 0);
-#endif /* CONFIG_USE_TXQ */
 
 	if (!nrc_is_valid_vif(tx.nw, tx.vif)) {
 		drop_reason = "invalid VIF";
@@ -912,9 +900,7 @@ static void nrc_mac_rx_h_status(struct nrc *nw, struct sk_buff *skb)
 	memset(status, 0, sizeof(*status));
 
 	status->signal = fh->flags.rx.rssi;
-#if KERNEL_VERSION(4, 7, 0) <= NRC_TARGET_KERNEL_VERSION
 	status->boottime_ns = ktime_to_ns(ktime_get_boottime());
-#endif
 #if defined(CONFIG_S1G_CHANNEL)
 	status->freq = (fh->info.rx.frequency) / 10;
 	status->freq_offset = (fh->info.rx.frequency % 10 ? 1 : 0);
@@ -928,13 +914,9 @@ static void nrc_mac_rx_h_status(struct nrc *nw, struct sk_buff *skb)
 	if (fh->flags.rx.iv_stripped)
 		status->flag |= RX_FLAG_IV_STRIPPED;
 
-#if ((KERNEL_VERSION(4, 4, 132) <= NRC_TARGET_KERNEL_VERSION) && \
-     (KERNEL_VERSION(4, 5, 0) > NRC_TARGET_KERNEL_VERSION)) ||   \
-	(KERNEL_VERSION(4, 7, 0) <= NRC_TARGET_KERNEL_VERSION)
 	if (mh->frame_control & 0x0400) {
 		status->flag |= RX_FLAG_ALLOW_SAME_PN;
 	}
-#endif
 
 	//update snr and rssi only if signal monitor is enabled
 	nrc_stats_update(mh->addr2, fh->flags.rx.snr, fh->flags.rx.rssi);
@@ -997,9 +979,7 @@ static int rx_h_vendor(struct nrc_trx_data *rx)
 	u8 i;
 
 	if (ieee80211_is_beacon(fc)
-#if KERNEL_VERSION(5, 10, 0) <= NRC_TARGET_KERNEL_VERSION
 	    || ieee80211_is_s1g_beacon(fc)
-#endif /* KERNEL_VERSION(5, 10, 0) <= NRC_TARGET_KERNEL_VERSION */
 	) {
 		struct nrc_vif *i_vif = rx->vif ? to_i_vif(rx->vif) : NULL;
 
@@ -1073,7 +1053,6 @@ static void nrc_rx_handler(void *data, u8 *mac, struct ieee80211_vif *vif)
 		if (res < 0)
 			goto rxh_out;
 	}
-#if KERNEL_VERSION(5, 10, 0) <= NRC_TARGET_KERNEL_VERSION
 	/*
 	 * Beacon (Management) frame header format (type:0, subtype:8)
 	 * fc(2) + duration(2) + addr1(da)(6) + addr2(sa)(6) + addr3(6) + ...
@@ -1087,9 +1066,6 @@ static void nrc_rx_handler(void *data, u8 *mac, struct ieee80211_vif *vif)
 			(struct ieee80211_ext *)rx->skb->data;
 		sta = ieee80211_find_all_sta(vif, ext_h->u.s1g_beacon.sa);
 	}
-#else
-	sta = ieee80211_find_all_sta(vif, mh->addr2);
-#endif /* KERNEL_VERSION(5, 10, 0) <= NRC_TARGET_KERNEL_VERSION */
 
 #if defined(CONFIG_SUPPORT_BEACON_BYPASS)
 	if (!rx->nw->params->enable_beacon_bypass) {
@@ -1173,14 +1149,9 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 
 	nrc_debug_print_frame(mh, 1);
 
-#ifdef CONFIG_SUPPORT_ITERATE_INTERFACE
 	/* Iterate over active interfaces */
 	ieee80211_iterate_interfaces(nw->hw, IEEE80211_IFACE_ITER_ACTIVE,
 				     nrc_rx_handler, &rx);
-#else
-	/* Iterate over active interfaces */
-	ieee80211_iterate_active_interfaces(nw->hw, nrc_rx_handler, &rx);
-#endif
 
 	/**
 	 * When associated, the scan results only include probe responses.
@@ -1202,9 +1173,7 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 	if (!rx.result) {
 		if (!rx.nw->params->disable_cqm &&
 		    (ieee80211_is_probe_resp(fc) || ieee80211_is_beacon(fc)
-#if KERNEL_VERSION(5, 10, 0) <= NRC_TARGET_KERNEL_VERSION
 		     || ieee80211_is_s1g_beacon(fc)
-#endif /* KERNEL_VERSION(5, 10, 0) <= NRC_TARGET_KERNEL_VERSION */
 			     ) &&
 		    atomic_read(&nw->scan_mode) == NRC_SCAN_MODE_IDLE) {
 			int _i;
@@ -1439,7 +1408,6 @@ static int rx_h_decrypt(struct nrc_trx_data *rx)
 	return 0;
 }
 
-#if KERNEL_VERSION(4, 6, 0) <= NRC_TARGET_KERNEL_VERSION
 static int rx_h_check_sn(struct nrc_trx_data *rx)
 {
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)rx->skb->data;
@@ -1464,12 +1432,7 @@ static int rx_h_check_sn(struct nrc_trx_data *rx)
 	fc = hdr->frame_control;
 	if (ieee80211_is_data_qos(fc) && !is_multicast_ether_addr(hdr->addr1)) {
 		struct nrc_sta *i_sta = to_i_sta(rx->sta);
-#if KERNEL_VERSION(4, 17, 0) <= NRC_TARGET_KERNEL_VERSION
 		u8 tid = ieee80211_get_tid(hdr);
-#else
-		u8 *qc = ieee80211_get_qos_ctl(hdr);
-		u8 tid = qc[0] & IEEE80211_QOS_CTL_TID_MASK;
-#endif
 		if (tid < NRC_MAX_TID && i_sta->rx_ba_session[tid].started) {
 			u16 sn = (le16_to_cpu(hdr->seq_ctrl) &
 				  IEEE80211_SCTL_SEQ) >>
@@ -1497,8 +1460,6 @@ static int rx_h_check_sn(struct nrc_trx_data *rx)
 
 	return 0;
 }
-
-#endif
 
 #if defined(CONFIG_SUPPORT_IBSS)
 extern u64 current_bssid_beacon_timestamp;
@@ -1539,7 +1500,7 @@ static int rx_h_action(struct nrc_trx_data *rx)
 	if (unlikely(mgmt->u.action.category != WLAN_CATEGORY_S1G))
 		return 0;
 
-	/* Currently, No use twt ops of the mac80211 upper layer that is supported from version 5.15.56 */
+	/* The driver handles TWT action frames itself instead of the mac80211 TWT ops */
 	switch (mgmt->u.action.u.chan_switch
 			.action_code) { /* same struct format */
 	case WLAN_S1G_TWT_SETUP: /* 6 */

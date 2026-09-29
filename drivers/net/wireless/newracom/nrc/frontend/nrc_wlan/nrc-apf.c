@@ -4,7 +4,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/version.h>
 
 #include "nrc.h"
 #include "nrc-hif.h"

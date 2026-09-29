@@ -10,11 +10,8 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/gpio.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 #include <linux/gpio/consumer.h>
 #include <linux/device.h>
-#endif
 
 /* Common directory headers */
 #include "nrc-debug-common.h"
@@ -22,8 +19,7 @@
 /* Local headers */
 #include "nrc-spi-gpio.h"
 
-/* GPIO descriptor storage for kernel 6.6+ */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+/* GPIO descriptor storage */
 #define MAX_GPIO_DESCRIPTORS 20
 static struct {
 	unsigned gpio_num;
@@ -70,23 +66,19 @@ static void remove_gpio_desc(unsigned gpio)
 		}
 	}
 }
-#endif
 
 /**
- * nrc_gpio_request - Request a GPIO pin with kernel version compatibility
+ * nrc_gpio_request - Request a GPIO pin
  * @gpio: GPIO number (for legacy API)
  * @label: Label for the GPIO request
  *
- * Kernel 6.6-6.11: Uses gpio_request with gpio_to_desc conversion
- * Kernel 6.12+: Uses gpio_request_one for proper allocation
- * Older kernels: Uses legacy gpio_request
+ * Requests the GPIO through the legacy API and keeps its descriptor for the
+ * gpiod_* calls.
  *
- * Returns: GPIO descriptor pointer for 6.6-6.11, NULL for success on other kernels, negative error code on failure
+ * Returns: GPIO descriptor pointer on success, ERR_PTR() on failure
  */
 struct gpio_desc *nrc_gpio_request(unsigned gpio, const char *label)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-	/* Kernel 6.6+: Use descriptor API with gpio_to_desc() */
 	struct gpio_desc *desc;
 	int ret;
 
@@ -118,41 +110,25 @@ struct gpio_desc *nrc_gpio_request(unsigned gpio, const char *label)
 		label);
 
 	return desc;
-#else
-	/* Older kernels: Use legacy GPIO API */
-	int ret = gpio_request(gpio, label);
-	if (ret < 0) {
-		ERR_HIF("GPIO: Failed to request GPIO %d with label '%s': %d",
-			gpio, label, ret);
-		return ERR_PTR(ret);
-	}
-	DBG_HIF("GPIO: Successfully requested GPIO %d with label '%s' (legacy API)",
-		gpio, label);
-	return NULL; /* Success with legacy API */
-#endif
 }
 
 /**
- * nrc_gpio_free - Free a GPIO pin with kernel version compatibility
+ * nrc_gpio_free - Free a GPIO pin
  * @gpio: GPIO number
  */
 void nrc_gpio_free(unsigned gpio)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-	/* Kernel 6.6+: Clean up descriptor table */
 	struct gpio_desc *desc = find_gpio_desc(gpio);
 	if (desc && !IS_ERR(desc)) {
 		/* Remove from our descriptor table first */
 		remove_gpio_desc(gpio);
 	}
-#endif
-	/* All kernels: Use legacy gpio_free */
 	gpio_free(gpio);
 	DBG_HIF("GPIO: Successfully freed GPIO %d", gpio);
 }
 
 /**
- * nrc_gpio_direction_output - Set GPIO as output with kernel version compatibility
+ * nrc_gpio_direction_output - Set GPIO as output
  * @gpio: GPIO number
  * @value: Initial output value
  *
@@ -160,22 +136,16 @@ void nrc_gpio_free(unsigned gpio)
  */
 int nrc_gpio_direction_output(unsigned gpio, int value)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-	/* Kernel 6.6+: Use descriptor API */
 	struct gpio_desc *desc = find_gpio_desc(gpio);
 	if (!desc) {
 		ERR_HIF("GPIO: GPIO %d descriptor not found", gpio);
 		return -EINVAL;
 	}
 	return gpiod_direction_output(desc, value);
-#else
-	/* Kernel 6.12+ or older: Use legacy API */
-	return gpio_direction_output(gpio, value);
-#endif
 }
 
 /**
- * nrc_gpio_set_value - Set GPIO output value with kernel version compatibility
+ * nrc_gpio_set_value - Set GPIO output value
  * @gpio: GPIO number
  * @value: Output value (0 or 1)
  */
@@ -183,38 +153,26 @@ void nrc_gpio_set_value(unsigned gpio, int value)
 {
 	DBG_HIF("Set GPIO %d to %s", gpio, value ? "HIGH" : "LOW");
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-	/* Kernel 6.6+: Use descriptor API */
 	struct gpio_desc *desc = find_gpio_desc(gpio);
 	if (!desc) {
 		ERR_HIF("GPIO: GPIO %d descriptor not found", gpio);
 		return;
 	}
 	gpiod_set_value(desc, value);
-#else
-	/* Kernel 6.12+ or older: Use legacy API */
-	gpio_set_value(gpio, value);
-#endif
 }
 
 /**
- * nrc_gpio_direction_input - Set GPIO as input with kernel version compatibility
+ * nrc_gpio_direction_input - Set GPIO as input
  * @gpio: GPIO number
  *
  * Returns: 0 on success, negative error code on failure
  */
 int nrc_gpio_direction_input(unsigned gpio)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-	/* Kernel 6.6+: Use descriptor API */
 	struct gpio_desc *desc = find_gpio_desc(gpio);
 	if (!desc) {
 		ERR_HIF("GPIO: GPIO %d descriptor not found", gpio);
 		return -EINVAL;
 	}
 	return gpiod_direction_input(desc);
-#else
-	/* Kernel 6.12+ or older: Use legacy API */
-	return gpio_direction_input(gpio);
-#endif
 }

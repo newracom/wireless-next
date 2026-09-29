@@ -148,11 +148,6 @@ struct nrc_spi_priv {
 	wait_queue_head_t tx_wait; /* TX slot wait queue */
 	wait_queue_head_t rx_wait; /* RX data wait queue */
 
-#if !defined(CONFIG_SUPPORT_THREADED_IRQ)
-	struct workqueue_struct *irq_wq;
-	struct work_struct irq_work;
-#endif
-
 	struct {
 		struct spi_sys_reg sys;
 		struct spi_status_reg status;

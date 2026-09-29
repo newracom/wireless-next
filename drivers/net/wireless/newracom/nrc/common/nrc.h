@@ -33,12 +33,6 @@ struct nrc_twt_sched;
 
 struct nrc_hif_device;
 
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
-#else
-#define IEEE80211_NUM_ACS (4)
-#define IEEE80211_P2P_NOA_DESC_MAX (4)
-#endif
-
 enum NRC_SCAN_MODE {
 	NRC_SCAN_MODE_IDLE = 0,
 	NRC_SCAN_MODE_ACTIVE_SCANNING,
@@ -47,18 +41,6 @@ enum NRC_SCAN_MODE {
 	NRC_SCAN_MODE_ABORTING,
 	NRC_SCAN_MODE_MAX,
 };
-
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
-#else
-enum ieee80211_sta_state {
-	/* NOTE: These need to be ordered correctly! */
-	IEEE80211_STA_NOTEXIST,
-	IEEE80211_STA_NONE,
-	IEEE80211_STA_AUTH,
-	IEEE80211_STA_ASSOC,
-	IEEE80211_STA_AUTHORIZED,
-};
-#endif
 
 enum ieee80211_tx_ba_state {
 	IEEE80211_BA_NONE,
@@ -138,11 +120,7 @@ struct nrc {
 	bool enable_vif[NR_NRC_VIF];
 	spinlock_t vif_lock;
 	bool promisc;
-#ifdef CONFIG_USE_NEW_BAND_ENUM
 	struct ieee80211_supported_band bands[NUM_NL80211_BANDS];
-#else
-	struct ieee80211_supported_band bands[IEEE80211_NUM_BANDS];
-#endif
 
 	u64 tsf_offset;
 	u32 sleep_ms;
@@ -268,10 +246,8 @@ struct nrc_vif {
 	/* true once a WIM_CMD_SET channel TLV has been sent to FW for this VIF */
 	bool fw_channel_set;
 
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
 	/* P2p client NoA */
 	struct ieee80211_noa_data noa;
-#endif
 };
 
 #define to_ieee80211_vif(v) \

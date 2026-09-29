@@ -7,10 +7,7 @@
 
 /* Linux kernel headers */
 #include <linux/kernel.h>
-#include <linux/version.h>
-#if KERNEL_VERSION(4, 8, 16) < LINUX_VERSION_CODE
 #include <linux/bitfield.h>
-#endif
 
 /* Linux networking headers */
 #include <net/mac80211.h>
@@ -29,7 +26,6 @@
 #include "nrc-vendor.h"
 
 /* Local module headers */
-#include "compat.h"
 #include "nrc-mac80211.h"
 #include "nrc-twt-sched.h"
 #include "nrc-mac80211-twt.h"
@@ -192,11 +188,9 @@ void nrc_mac_tx_twt_setup(struct nrc *nw, struct ieee80211_sta *sta,
 	struct ieee80211_mgmt *mgmt;
 	struct ieee80211_twt_setup *twt_setup;
 	struct ieee80211_tx_info *txi;
-#ifdef CONFIG_SUPPORT_TX_CONTROL
 	struct ieee80211_tx_control control = {
 		.sta = sta,
 	};
-#endif
 #ifdef NRC_TWT_VENDOR_IE_ENABLE
 	struct ieee80211_twt_setup_vendor_ie *twt_vendor_ie;
 	struct nrc_twt_sched *twt_sched = nw->twt_sched;
@@ -247,11 +241,7 @@ void nrc_mac_tx_twt_setup(struct nrc *nw, struct ieee80211_sta *sta,
 	txi = IEEE80211_SKB_CB(skb);
 	txi->control.vif = vif;
 
-#ifdef CONFIG_SUPPORT_NEW_MAC_TX
 	nrc_mac_tx_process(hw, &control, skb, false);
-#else
-	nrc_mac_tx_process(hw, skb, false);
-#endif
 }
 
 void nrc_mac_rx_twt_setup(struct nrc *nw, struct ieee80211_sta *sta,
@@ -343,11 +333,7 @@ void nrc_mac_rx_twt_setup_assoc_req(struct nrc *nw, struct ieee80211_sta *sta,
 {
 	u8 *ies = mgmt->u.assoc_req.variable;
 	size_t ies_len = len - (ies - (u8 *)mgmt);
-#if KERNEL_VERSION(5, 1, 0) > LINUX_VERSION_CODE
-	const u8 *ie;
-#else
 	const struct element *elem;
-#endif
 	struct ieee80211_twt_setup *twt;
 	struct ieee80211_twt_setup_ie *twt_ie;
 	struct ieee80211_twt_params *twt_agrt;
@@ -359,19 +345,11 @@ void nrc_mac_rx_twt_setup_assoc_req(struct nrc *nw, struct ieee80211_sta *sta,
 		       ies, ies_len, true);
 #endif
 
-#if KERNEL_VERSION(5, 1, 0) > LINUX_VERSION_CODE
-	ie = cfg80211_find_ie(WLAN_EID_S1G_TWT, ies, ies_len);
-	if (ie == NULL) {
-		goto done;
-	}
-	twt_ie = (void *)ie + 2;
-#else
 	elem = cfg80211_find_elem(WLAN_EID_S1G_TWT, ies, ies_len);
 	if (elem == NULL) {
 		goto done;
 	}
 	twt_ie = (void *)elem->data;
-#endif
 
 	DBG_STATE("TWT IE FOUND in Assoc Req");
 

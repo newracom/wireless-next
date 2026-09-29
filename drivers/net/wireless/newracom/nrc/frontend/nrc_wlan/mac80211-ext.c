@@ -16,7 +16,6 @@
 #include "nrc-debug-common.h"
 
 /* Local module headers */
-#include "compat.h"
 #include "mac80211-ext.h"
 #include "nrc-mac80211.h"
 
@@ -169,9 +168,7 @@ struct sk_buff *ieee80211_deauth_get(struct ieee80211_hw *hw, u8 *da, u8 *sa,
 	status = IEEE80211_SKB_RXCB(skb);
 	status->flag |= RX_FLAG_DECRYPTED;
 	status->flag |= RX_FLAG_MMIC_STRIPPED;
-#if KERNEL_VERSION(4, 3, 0) <= NRC_TARGET_KERNEL_VERSION
 	status->flag |= RX_FLAG_PN_VALIDATED;
-#endif
 
 complete:
 #ifdef CONFIG_S1G_CHANNEL

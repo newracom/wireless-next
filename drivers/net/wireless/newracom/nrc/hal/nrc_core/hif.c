@@ -348,43 +348,6 @@ static bool is_urgent_frame(struct sk_buff *skb)
 	 */
 	return ret;
 }
-#if 0
-#error "If you enable this, consider new feature of 7393 that supports vif1"
-/*******************************************************************************
-* FunctionName : skb_change_ac
-* Description : force change the access category of the skb
-* Parameters : hdev, skb, ac(aceess category want to change)
-						ac:0 is for BK. ac:1 is BE, ac:2 is VI, ac:3 is VO)
-* Returns : -1 Not change aceess category
-			 0 access category change done
-*******************************************************************************/
-int skb_change_ac(struct nrc_hif_device *hdev, struct sk_buff *skb, uint8_t ac)
-{
-	struct hif *hif;
-	struct frame_hdr *fh;
-	int credit;
-
-	u8 *p;
-	p = (u8*)skb->data;
-	hif = (void*)p;
-	if (hif->type != HIF_TYPE_FRAME) {
-		return -1;
-	}
-
-	fh = (void*)(p+sizeof(struct hif));
-
-	if (ac>3)
-		return -1;
-
-	credit = DIV_ROUND_UP(skb->len, hdev->fw.fwinfo.buffer_size);
-
-	atomic_sub(credit, &hdev->credit.tx_pend[fh->flags.tx.ac]);
-	fh->flags.tx.ac = (hif->vifindex == 0 ? ac : ac+6);
-	atomic_add(credit, &hdev->credit.tx_pend[fh->flags.tx.ac]);
-
-	return 0;
-}
-#endif
 #endif /* defined(CONFIG_TXQ_ORDER_CHANGE_NRC_DRV) */
 
 int hif_enqueue_skb(struct nrc_hif_device *hdev, struct sk_buff *skb)
@@ -545,11 +508,9 @@ static u32 nrc_skb_append_tx_info(struct nrc_hif_device *hdev, u16 aid,
 	}
 
 	p = nrc_wim_skb_add_tlv(skb, WIM_TLV_EXTRA_TX_INFO, sizeof(*p), NULL);
-#ifdef CONFIG_SUPPORT_TX_CONTROL
 	p->use_rts = txi->control.use_rts;
 	p->use_11b_protection = txi->control.use_cts_prot;
 	p->short_preamble = txi->control.short_preamble;
-#endif
 	p->ampdu = !!(txi->flags & IEEE80211_TX_CTL_AMPDU);
 	p->after_dtim = !!(txi->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM);
 	p->no_ack = !!(txi->flags & IEEE80211_TX_CTL_NO_ACK);
@@ -604,9 +565,7 @@ int nrc_xmit_injected_frame(struct ieee80211_vif *vif,
 	fh = (void *)(hif + 1);
 	fh->info.tx.tlv_len = extra_len;
 	fh->info.tx.cipher = WIM_CIPHER_TYPE_NONE;
-#ifdef CONFIG_SUPPORT_TX_CONTROL
 	fh->flags.tx.ac = txi->hw_queue;
-#endif
 
 	if (ieee80211_is_data(fc)) {
 		hif->subtype = HIF_FRAME_SUB_DATA_BE;
@@ -649,9 +608,7 @@ int nrc_xmit_wlan_frame(s8 vif_index, u16 aid, struct sk_buff *skb)
 	struct ieee80211_key_conf *key = txi->control.hw_key;
 	int extra_len, ret = 0;
 	int credit;
-#if defined(CONFIG_SUPPORT_KEY_RESERVE_TAILROOM)
 	int crypto_tail_len = 0;
-#endif
 	struct nrc_hif_device *hdev = nrc_hal_core_get_hdev();
 
 	if (!hdev) {
@@ -665,7 +622,6 @@ int nrc_xmit_wlan_frame(s8 vif_index, u16 aid, struct sk_buff *skb)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_SUPPORT_KEY_RESERVE_TAILROOM)
 	if ((key && (key->flags & IEEE80211_KEY_FLAG_RESERVE_TAILROOM)) &&
 	    (hdev->cap.cap_mask & WIM_SYSTEM_CAP_HWSEC_OFFL)) {
 		switch (key->cipher) {
@@ -706,7 +662,6 @@ int nrc_xmit_wlan_frame(s8 vif_index, u16 aid, struct sk_buff *skb)
 		}
 		skb_put(skb, crypto_tail_len);
 	}
-#endif
 
 	extra_len = nrc_skb_append_tx_info(hdev, aid, skb, false);
 
@@ -724,9 +679,7 @@ int nrc_xmit_wlan_frame(s8 vif_index, u16 aid, struct sk_buff *skb)
 	fh = (void *)(hifh + 1);
 	fh->info.tx.tlv_len = extra_len;
 	fh->info.tx.cipher = WIM_CIPHER_TYPE_NONE;
-#ifdef CONFIG_SUPPORT_TX_CONTROL
 	fh->flags.tx.ac = txi->hw_queue;
-#endif
 
 	if (key) {
 		if (!ieee80211_has_protected(fc))

@@ -10,10 +10,6 @@
 #include <linux/bitops.h>
 #include <linux/if_ether.h>
 #include <net/mac80211.h>
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
-#else
-#include "nrc-mac80211.h"
-#endif
 
 #include "nrc-wim-types.h"
 

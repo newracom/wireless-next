@@ -7,6 +7,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/firmware.h>
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -1069,7 +1070,7 @@ int nrc_fw_start(struct nrc_hif_device *hdev)
 	p->bitmap_encoding = hdev->params->bitmap_encoding;
 	p->reverse_scrambler = hdev->params->reverse_scrambler;
 	p->kern_ver =
-		(NRC_TARGET_KERNEL_VERSION >> 8) &
+		(LINUX_VERSION_CODE >> 8) &
 		0x0fff; // 12 bits for kernel version (4 for major, 8 for minor)
 	p->ps_pretend_flag = hdev->params->ps_pretend;
 	p->sub_xtal_bypass = hdev->params->sub_xtal_bypass;

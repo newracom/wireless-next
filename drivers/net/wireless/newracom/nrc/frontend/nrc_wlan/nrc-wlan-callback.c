@@ -435,9 +435,7 @@ static int nrc_wlan_handle_cleanup_txq_all(struct nrc_hal_event_data *event)
 	ieee80211_stop_queues(nw->hw);
 
 	/* Call the cleanup all TX queues function */
-#ifdef CONFIG_USE_TXQ
 	nrc_cleanup_txq_all(nw);
-#endif
 
 	return 0;
 }
@@ -687,23 +685,15 @@ static int nrc_wlan_handle_wim_event(struct nrc_hal_event_data *hal_event)
 	case WIM_EVENT_CSA:
 		DBG_MAC("WLAN: Processing WIM_EVENT_CSA");
 		if (vif) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 9, 0)
-			ieee80211_csa_finish(vif, 0);
-#else
 			ieee80211_csa_finish(vif);
-#endif
 		}
 		break;
 
 	case WIM_EVENT_CH_SWITCH:
 		DBG_MAC("WLAN: Processing WIM_EVENT_CH_SWITCH");
 		if (vif) {
-#if KERNEL_VERSION(6, 7, 0) <= NRC_TARGET_KERNEL_VERSION
 			ieee80211_chswitch_done(vif, true,
 						vif->bss_conf.link_id);
-#else
-			ieee80211_chswitch_done(vif, true);
-#endif
 		}
 		break;
 
@@ -712,9 +702,7 @@ static int nrc_wlan_handle_wim_event(struct nrc_hal_event_data *hal_event)
 		{
 			struct wim_tlv *tlv = (struct wim_tlv *)wim->payload;
 			if (tlv->t == WIM_TLV_MACADDR_PARAM) {
-#ifdef CONFIG_USE_TXQ
 				nrc_cleanup_txq_by_macaddr(nw, vif, tlv->v);
-#endif
 			} else {
 				DBG_MAC("WLAN: Invalid TLV type for WIN_EVENT_CLEAN_TXQ_STA");
 			}

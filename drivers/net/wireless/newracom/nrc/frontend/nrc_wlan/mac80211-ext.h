@@ -14,44 +14,6 @@ struct bss_max_idle_period_ie {
 	u8 idle_option;
 } __packed;
 
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
-#else
-static inline void eth_zero_addr(u8 *addr)
-{
-	memset(addr, 0x00, ETH_ALEN);
-}
-
-static inline bool ether_addr_equal(const u8 *addr1, const u8 *addr2)
-{
-#if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
-	u32 fold = ((*(const u32 *)addr1) ^ (*(const u32 *)addr2)) |
-		   ((*(const u16 *)(addr1 + 4)) ^ (*(const u16 *)(addr2 + 4)));
-
-	return fold == 0;
-#else
-	const u16 *a = (const u16 *)addr1;
-	const u16 *b = (const u16 *)addr2;
-
-	return ((a[0] ^ b[0]) | (a[1] ^ b[1]) | (a[2] ^ b[2])) == 0;
-#endif
-}
-
-static inline void ether_addr_copy(u8 *dst, const u8 *src)
-{
-#if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
-	*(u32 *)dst = *(const u32 *)src;
-	*(u16 *)(dst + 4) = *(const u16 *)(src + 4);
-#else
-	u16 *a = (u16 *)dst;
-	const u16 *b = (const u16 *)src;
-
-	a[0] = b[0];
-	a[1] = b[1];
-	a[2] = b[2];
-#endif
-}
-#endif
-
 static inline u32 ieee80211_usf_to_sf(u8 usf)
 {
 	return (usf == 1) ? 10 : (usf == 2) ? 1000 : (usf == 3) ? 10000 : 1;

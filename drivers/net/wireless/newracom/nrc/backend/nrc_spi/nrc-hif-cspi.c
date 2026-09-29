@@ -15,14 +15,9 @@
 #include <linux/spi/spi.h>
 #include <linux/timekeeping.h>
 #include <linux/wait.h>
-#include <linux/version.h>
 
 /* Assembly headers - compatibility for different kernel versions */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-#include <linux/unaligned.h>
-#else
 #include <asm/unaligned.h>
-#endif
 
 /* Common directory headers - Core */
 #include "nrc.h"
@@ -150,31 +145,6 @@ static inline void spi_set_transfer(struct spi_transfer *xfer, void *tx,
 	xfer->rx_buf = rx;
 	xfer->len = len;
 }
-
-#ifdef CONFIG_SUPPORT_SPI_SYNC_TRANSFER
-#else
-static inline void spi_message_init_with_transfers(struct spi_message *m,
-						   struct spi_transfer *xfers,
-						   unsigned int num_xfers)
-{
-	unsigned int i;
-
-	spi_message_init(m);
-	for (i = 0; i < num_xfers; ++i)
-		spi_message_add_tail(&xfers[i], m);
-}
-
-static inline int spi_sync_transfer(struct spi_device *spi,
-				    struct spi_transfer *xfers,
-				    unsigned int num_xfers)
-{
-	struct spi_message msg;
-
-	spi_message_init_with_transfers(&msg, xfers, num_xfers);
-
-	return spi_sync(spi, &msg);
-}
-#endif
 
 int _c_spi_write_dummy(struct spi_device *spi)
 {
@@ -952,14 +922,7 @@ void nrc_spi_free_irq(struct nrc_spi_priv *priv)
 
 static unsigned long get_tod_usec(void)
 {
-#if KERNEL_VERSION(5, 0, 0) > LINUX_VERSION_CODE
-	struct timeval tv;
-
-	do_gettimeofday(&tv);
-	return tv.tv_usec;
-#else
 	return (unsigned long)ktime_to_us(ktime_get());
-#endif
 }
 
 static int spi_loopback(struct nrc_hif_device *hdev, struct spi_device *spi,
@@ -1921,7 +1884,6 @@ static void spi_irq_handler(struct nrc_hif_device *hdev)
 	spi_update_status(hdev);
 }
 
-#ifdef CONFIG_SUPPORT_THREADED_IRQ
 /* Threaded IRQ handler - runs in thread context */
 irqreturn_t spi_irq(int irq, void *data)
 {
@@ -1933,39 +1895,6 @@ irqreturn_t spi_irq(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
-#else
-/* Hard IRQ handler - queues work for processing */
-static irqreturn_t spi_irq(int irq, void *data)
-{
-	struct nrc_hif_device *hdev = data;
-	struct nrc_spi_priv *priv = nrc_spi_get_priv();
-
-	if (hdev && priv) {
-		queue_work(priv->irq_wq, &priv->irq_work);
-	}
-
-	return IRQ_HANDLED;
-}
-
-/* Workqueue worker - processes interrupt in process context */
-static void irq_worker(struct work_struct *work)
-{
-	struct nrc_spi_priv *priv =
-		container_of(work, struct nrc_spi_priv, irq_work);
-
-	VBS_BUS("%s", __func__);
-
-	/* Check core references before proceeding */
-	if (!spi_check_core_refs(priv, __func__)) {
-		return;
-	}
-
-	/* Call common handler if hdev is valid */
-	if (priv->hdev) {
-		spi_irq_handler(priv->hdev);
-	}
-}
-#endif
 
 static void spi_poll_status(struct work_struct *work)
 {
@@ -2338,10 +2267,6 @@ struct nrc_spi_priv *nrc_cspi_alloc(struct spi_device *dev)
 	mutex_init(&priv->slot_sync_lock);
 	priv->slot_sync_lock_initialized = true;
 
-#if !defined(CONFIG_SUPPORT_THREADED_IRQ)
-	priv->irq_wq = create_singlethread_workqueue("nrc_cspi_irq");
-	INIT_WORK(&priv->irq_work, irq_worker);
-#endif
 	INIT_DELAYED_WORK(&priv->work, spi_poll_status);
 
 	priv->polling_interval = spi_polling_interval; /* from module param */
@@ -2352,9 +2277,6 @@ struct nrc_spi_priv *nrc_cspi_alloc(struct spi_device *dev)
 	priv->dummy_slot = kzalloc(TX_SLOT_SIZE, GFP_KERNEL);
 	if (!priv->dummy_slot) {
 		ERR("dummy_slot alloc failed");
-#if !defined(CONFIG_SUPPORT_THREADED_IRQ)
-		destroy_workqueue(priv->irq_wq);
-#endif
 		kfree(priv);
 		return NULL;
 	}
@@ -2366,11 +2288,6 @@ struct nrc_spi_priv *nrc_cspi_alloc(struct spi_device *dev)
 void nrc_cspi_free(struct nrc_spi_priv *priv)
 {
 	/* IRQ is freed in spi_stop() function, not here to avoid double free */
-
-#if !defined(CONFIG_SUPPORT_THREADED_IRQ)
-	flush_workqueue(priv->irq_wq);
-	destroy_workqueue(priv->irq_wq);
-#endif
 
 	priv->spi->dev.platform_data = NULL;
 	kfree(priv->dummy_slot);
@@ -2467,18 +2384,14 @@ struct spi_device *nrc_create_spi_device(void)
 		return NULL;
 	}
 	/*
-	 * In kernel version 6.8 or higher, multiple cs is supporting.
-	 * Since we do not support multiple cs, we can use chip_select index 0.
+	 * The SPI core supports multiple chip selects; this driver uses only
+	 * chip_select index 0.
 	 * However, it appears that the function below may need to be used in the future.
 	 * example) int cs = spi_get_chipselect(spi, 0);
 	 */
 	INFO("SPI Device Created (bus_num:%d, cs_num:%d, irq_num:%d, max_speed:%d",
 	     spi->master->bus_num,
-#if KERNEL_VERSION(6, 8, 0) <= NRC_TARGET_KERNEL_VERSION
 	     spi->chip_select[0],
-#else
-	     spi->chip_select,
-#endif
 	     spi->irq, spi->max_speed_hz);
 	return spi;
 }

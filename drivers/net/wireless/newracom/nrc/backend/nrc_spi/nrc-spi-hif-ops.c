@@ -15,10 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
 #include <linux/spi/spi.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 #include <linux/gpio/consumer.h>
-#endif
 
 /* Common directory headers - Core */
 #include "nrc.h"
@@ -194,25 +191,14 @@ static int spi_hif_start(struct nrc_hif_device *hdev)
 		/* Non-DT: specify trigger type explicitly */
 		unsigned long irq_flags = IRQF_TRIGGER_HIGH | IRQF_ONESHOT;
 #endif
-#ifdef CONFIG_SUPPORT_THREADED_IRQ
 		if (!priv->irq_requested) {
 			ret = request_threaded_irq(spi->irq, NULL, spi_irq,
 						   irq_flags, "nrc-spi-irq",
 						   hdev);
 		}
-#else
-		if (!priv->irq_requested) {
-			ret = request_irq(spi->irq, spi_irq, irq_flags,
-					  "nrc-spi-irq", hdev);
-		}
-#endif
 
 		if (ret < 0) {
-#ifdef CONFIG_SUPPORT_THREADED_IRQ
 			ERR("request_irq() is failed");
-#else
-			ERR("request_threaded_irq() is failed");
-#endif
 			priv->irq_requested = false;
 			priv->irq_dev_id = NULL;
 			goto kill_kthread;

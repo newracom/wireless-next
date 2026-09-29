@@ -526,7 +526,6 @@ int nrc_wim_response_handler(struct sk_buff *skb)
 	return 1; /* SKB stored, caller should NOT free */
 }
 
-#ifdef CONFIG_USE_TXQ
 int nrc_wim_update_tx_credit(struct nrc_hif_device *hdev, struct wim *wim)
 {
 	struct wim_credit_report *r = (void *)(wim + 1);
@@ -580,7 +579,6 @@ int nrc_wim_update_tx_credit(struct nrc_hif_device *hdev, struct wim *wim)
 
 	return 0;
 }
-#endif
 
 int nrc_wim_set_ps(struct nrc_hif_device *hdev, enum NRC_PS_MODE mode,
 		   u64 timeout, struct cfg80211_wowlan *wowlan)

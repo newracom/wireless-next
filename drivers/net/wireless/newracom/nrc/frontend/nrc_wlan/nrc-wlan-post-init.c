@@ -82,13 +82,7 @@ int nrc_wlan_post_hal_init(bool restart)
 	}
 
 	/* Initialize TX tasklet for IEEE80211 queue processing */
-#ifdef CONFIG_USE_TXQ
-#ifdef CONFIG_NEW_TASKLET_API
 	tasklet_setup(&nw->tx_tasklet, nrc_tx_tasklet);
-#else
-	tasklet_init(&nw->tx_tasklet, nrc_tx_tasklet, (unsigned long)nw);
-#endif
-#endif
 
 	/* CQM timers are now initialized per-VIF in nrc_mac_add_interface */
 	if (!nw->params->disable_cqm)
@@ -197,9 +191,7 @@ void nrc_wlan_post_hal_cleanup(bool restart)
 
 	nrc_twt_sched_deinit(nw);
 
-#ifdef CONFIG_USE_TXQ
 	tasklet_kill(&nw->tx_tasklet);
-#endif
 
 	if (!restart) {
 		nrc_unregister_hw(nw);

@@ -16,28 +16,10 @@ struct dentry;
 struct nrc;
 
 /* TWT structure definitions - use kernel provided ieee80211_twt_params */
-/* ieee80211_twt_params was added in kernel 5.12 (commit 75d9da3c98b3) */
-#if KERNEL_VERSION(5, 12, 0) <= LINUX_VERSION_CODE
-/* Use kernel-provided ieee80211_twt_params */
 struct ieee80211_twt_setup_assoc_ie {
 	u8 control;
 	struct ieee80211_twt_params params;
 } __packed;
-#else
-/* Fallback for older kernels without TWT support (< 5.12) */
-struct ieee80211_twt_params {
-	__le16 req_type;
-	__le64 twt;
-	u8 min_twt_dur;
-	__le16 mantissa;
-	u8 channel;
-} __packed;
-
-struct ieee80211_twt_setup_assoc_ie {
-	u8 control;
-	struct ieee80211_twt_params params;
-} __packed;
-#endif
 
 /* TWT definitions */
 #define NRC_MAX_STA_TWT_AGRT 1

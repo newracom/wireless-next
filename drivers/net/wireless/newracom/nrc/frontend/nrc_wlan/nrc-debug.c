@@ -233,20 +233,6 @@ static int nrc_debugfs_wlan_info_show(struct seq_file *s, void *unused)
 		seq_printf(s, "  MAC Address: %pM\n", vif->addr);
 
 		/* Channel information */
-#if KERNEL_VERSION(6, 9, 0) <= NRC_TARGET_KERNEL_VERSION
-		if (vif->bss_conf.chanreq.oper.chan) {
-			int hw_value =
-				vif->bss_conf.chanreq.oper.chan->hw_value;
-			int center_freq =
-				vif->bss_conf.chanreq.oper.chan->center_freq;
-
-			/* 2.4GHz/5GHz channel information */
-			seq_printf(s, "  2.4/5GHz Channel: %d\n", hw_value);
-			seq_printf(s, "  2.4/5GHz Center Frequency: %d MHz\n",
-				   center_freq);
-			seq_printf(s, "  Channel Width: ");
-			switch (vif->bss_conf.chanreq.oper.width) {
-#else
 		if (vif->bss_conf.chandef.chan) {
 			int hw_value = vif->bss_conf.chandef.chan->hw_value;
 			int center_freq =
@@ -258,7 +244,6 @@ static int nrc_debugfs_wlan_info_show(struct seq_file *s, void *unused)
 				   center_freq);
 			seq_printf(s, "  Channel Width: ");
 			switch (vif->bss_conf.chandef.width) {
-#endif
 			case NL80211_CHAN_WIDTH_20:
 				seq_printf(s, "20 MHz\n");
 				break;
@@ -321,15 +306,9 @@ static int nrc_debugfs_wlan_info_show(struct seq_file *s, void *unused)
 
 		/* Connection status for STA mode */
 		if (vif->type == NL80211_IFTYPE_STATION) {
-#ifdef CONFIG_USE_VIF_CFG
 			seq_printf(s, "  Associated: %s\n",
 				   vif->cfg.assoc ? "Yes" : "No");
 			if (vif->cfg.assoc) {
-#else
-			seq_printf(s, "  Associated: %s\n",
-				   vif->bss_conf.assoc ? "Yes" : "No");
-			if (vif->bss_conf.assoc) {
-#endif
 				seq_printf(s, "  BSSID: %pM\n",
 					   vif->bss_conf.bssid);
 			}
