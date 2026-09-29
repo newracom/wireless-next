@@ -27,10 +27,8 @@
 #include "nrc-mcp-init.h"
 #include "nrc-debug.h"
 
-/* Global debug variables - defined as module parameters in nrc-mcp-params.c */
-extern unsigned long debug_mask;
-extern int debug_level;
-struct device *g_dev;
+/* Debug device for this layer; level and mask are module parameters in nrc-mcp-params.c */
+struct device *nrc_debug_dev;
 
 #ifdef CONFIG_DEBUG_FS
 /* MCP debugfs root directory */
@@ -44,13 +42,13 @@ static struct dentry *mcp_debugfs_root;
 /* MCP module-specific debug mask control */
 static int nrc_mcp_debugfs_debug_read(void *data, u64 *val)
 {
-	*val = debug_mask;
+	*val = nrc_debug_mask;
 	return 0;
 }
 
 static int nrc_mcp_debugfs_debug_write(void *data, u64 val)
 {
-	debug_mask = val;
+	nrc_debug_mask = val;
 	return 0;
 }
 
@@ -61,14 +59,14 @@ DEFINE_SIMPLE_ATTRIBUTE(nrc_mcp_debugfs_debug_fops,
 /* MCP module-specific debug level control */
 static int nrc_mcp_debugfs_level_read(void *data, u64 *val)
 {
-	*val = debug_level;
+	*val = nrc_debug_level;
 	return 0;
 }
 
 static int nrc_mcp_debugfs_level_write(void *data, u64 val)
 {
 	if (val < NRC_DBG_LEVEL_MAX)
-		debug_level = (enum NRC_DEBUG_LEVEL)val;
+		nrc_debug_level = (enum NRC_DEBUG_LEVEL)val;
 	return 0;
 }
 
@@ -78,7 +76,7 @@ DEFINE_SIMPLE_ATTRIBUTE(nrc_mcp_debugfs_level_fops,
 #endif /* CONFIG_DEBUG_FS */
 
 /**
- * nrc_init_debugfs - Initialize MCP debugfs interface
+ * nrc_mcp_init_debugfs - Initialize MCP debugfs interface
  * @mcp: MCP device structure
  *
  * Note: Common debugfs entries (nrc_credit, nrc_debug, nrc_cspi, nrc_reset, nrc_restart)
@@ -87,7 +85,7 @@ DEFINE_SIMPLE_ATTRIBUTE(nrc_mcp_debugfs_level_fops,
  *
  * MCP-specific debugfs entries (if any) would be created here.
  */
-void nrc_init_debugfs(struct mcp_priv *mcp)
+void nrc_mcp_init_debugfs(struct mcp_priv *mcp)
 {
 #ifdef CONFIG_DEBUG_FS
 	if (!mcp) {
@@ -116,12 +114,12 @@ void nrc_init_debugfs(struct mcp_priv *mcp)
 }
 
 /**
- * nrc_exit_debugfs - Cleanup MCP debugfs interface
+ * nrc_mcp_exit_debugfs - Cleanup MCP debugfs interface
  * @mcp: MCP device structure
  *
  * Removes all MCP debugfs entries.
  */
-void nrc_exit_debugfs(struct mcp_priv *mcp)
+void nrc_mcp_exit_debugfs(struct mcp_priv *mcp)
 {
 #ifdef CONFIG_DEBUG_FS
 	if (mcp_debugfs_root) {

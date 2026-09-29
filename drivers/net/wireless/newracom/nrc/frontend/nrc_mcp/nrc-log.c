@@ -10,11 +10,6 @@
 
 #include "nrc-log.h"
 
-/* Global debug mask, level, and device - defined in nrc-debug.c */
-extern unsigned long nrc_debug_mask;
-extern enum NRC_DEBUG_LEVEL nrc_debug_level;
-extern struct device *g_dev;
-
 /**
  * nrc_logger_set - Set debug level using legacy string interface
  * @str_module: Module name (ignored - applies globally in MCP)
