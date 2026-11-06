@@ -73,17 +73,6 @@
 /* uncomment define below to set tx power via iw or iwconfig */
 /* #define CONFIG_SUPPORT_IW_IWCONFIG_TXPWR */
 
-/* Describe the SPI device in the device tree (nrc-cspi@0). */
-#define CONFIG_SPI_USE_DT
-
-/* Without DT the driver creates the SPI device itself from the spi_bus_num
- * and spi_cs_num module parameters, using a driver-local replacement for the
- * removed spi_busnum_to_master().
- */
-#if !defined(CONFIG_SPI_USE_DT)
-#define CONFIG_SPI_USE_FUNC
-#endif
-
 /*
 this feature is disabled
 #define CONFIG_USE_KERNEL_S1G_TWT

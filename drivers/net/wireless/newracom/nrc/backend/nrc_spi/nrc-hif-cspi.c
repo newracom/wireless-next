@@ -2107,7 +2107,6 @@ int nrc_cspi_hw_reset(struct nrc_spi_priv *priv)
 	 * chip at base 512, so the same physical pin is 516 there; boards on
 	 * such kernels use the device tree instead.
 	 */
-#if defined(CONFIG_SPI_USE_DT)
 	if (priv->reset_gpio) {
 		/* Assert (active low line, so a 1 here drives reset) */
 		gpiod_set_value_cansleep(priv->reset_gpio, 1);
@@ -2116,7 +2115,6 @@ int nrc_cspi_hw_reset(struct nrc_spi_priv *priv)
 		INFO("Chip reset: hardware line (dt gpio)");
 		return 0;
 	}
-#endif
 	if (priv->reset_gpio_num < 0)
 		return -ENODEV;
 
@@ -2154,10 +2152,8 @@ static int nrc_cspi_reset_gpio_param_request(struct nrc_spi_priv *priv)
 {
 	if (!priv || spi_reset_gpio < 0)
 		return 0; /* soft-reset: no param GPIO */
-#if defined(CONFIG_SPI_USE_DT)
 	if (priv->reset_gpio)
 		return 0; /* DT reset-gpios present, param ignored */
-#endif
 	if (IS_ERR(nrc_gpio_request(spi_reset_gpio, "nrc-reset"))) {
 		ERR("gpio_request(nrc-reset param %d) failed", spi_reset_gpio);
 		return -EINVAL;
@@ -2181,7 +2177,6 @@ static void nrc_cspi_reset_gpio_param_free(struct nrc_spi_priv *priv)
 int nrc_cspi_gpio_alloc(struct spi_device *spi)
 {
 #if defined(ENABLE_HW_RESET)
-#if defined(CONFIG_SPI_USE_DT)
 	((struct nrc_spi_priv *)(spi->dev.platform_data))->reset_gpio =
 		devm_gpiod_get_optional(&spi->dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(((struct nrc_spi_priv *)(spi->dev.platform_data))
@@ -2189,13 +2184,10 @@ int nrc_cspi_gpio_alloc(struct spi_device *spi)
 		ERR("gpio_request(nrc-reset) failed");
 		goto err;
 	}
-#endif
 
 	/*
-	 * Claim the reset GPIO named by the spi_reset_gpio module param.
-	 * With DT this is only the fallback for a missing reset-gpios; without
-	 * DT it is the only way to pick the reset GPIO at runtime, so the
-	 * request must not be tied to CONFIG_SPI_USE_DT.
+	 * Claim the reset GPIO named by the spi_reset_gpio module param, the
+	 * fallback for a device tree without reset-gpios.
 	 */
 	if (nrc_cspi_reset_gpio_param_request(spi->dev.platform_data) < 0)
 		goto err;
@@ -2204,23 +2196,9 @@ int nrc_cspi_gpio_alloc(struct spi_device *spi)
 	/* Power save GPIO allocation moved to HAL initialization -
 	 * will be handled when power_save parameter is available via nw structure */
 
-#ifndef CONFIG_SPI_USE_DT /* spi->irq is real irq number, not gpio number by setting in dts */
-	if (spi_gpio_irq >= 0) {
-		/* Claim gpio used for irq */
-		if (nrc_gpio_request(spi_gpio_irq, "nrc-spi-irq") < 0) {
-			ERR("gpio_request() failed (%d)",
-			    spi_gpio_irq);
-			goto err_rst_free;
-		}
-		nrc_gpio_direction_input(spi_gpio_irq);
-	}
-#endif
 
 	return 0;
 
-#ifndef CONFIG_SPI_USE_DT
-err_rst_free:
-#endif
 #if defined(ENABLE_HW_RESET)
 err:
 	/* Safe when the param GPIO was never claimed (reset_gpio_num == -1) */
@@ -2238,11 +2216,6 @@ void nrc_cspi_gpio_free(struct spi_device *spi)
 
 	/* Power save GPIO cleanup moved to HAL cleanup */
 
-#ifndef CONFIG_SPI_USE_DT /* spi->irq is real irq number, not gpio number by setting in dts */
-	if (spi_gpio_irq >= 0) {
-		nrc_gpio_free(spi_gpio_irq);
-	}
-#endif
 }
 
 struct nrc_spi_priv *nrc_cspi_alloc(struct spi_device *dev)
@@ -2297,104 +2270,8 @@ void nrc_cspi_free(struct nrc_spi_priv *priv)
 
 /* spi_driver structure moved to nrc-spi-init.c */
 
-#ifndef CONFIG_SPI_USE_DT
-static struct spi_board_info bi = {
-	.modalias = NRC_DRIVER_NAME,
-	//	.chip_select = 0,
-	.mode = SPI_MODE_0,
-};
-#endif
 
-#ifdef CONFIG_SPI_USE_FUNC
 
-static int __spi_controller_match(struct device *dev, const void *data)
-{
-	struct spi_controller *ctlr;
-	const u16 *bus_num = data;
-
-	ctlr = container_of(dev, struct spi_controller, dev);
-
-	if (!ctlr) {
-		return 0;
-	}
-
-	return ctlr->bus_num == *bus_num;
-}
-
-static struct spi_controller *spi_busnum_to_master(u16 bus_num)
-{
-	struct platform_device *pdev = NULL;
-	struct spi_master *master = NULL;
-	struct spi_controller *ctlr = NULL;
-	struct device *dev = NULL;
-
-	pdev = platform_device_alloc("pdev", PLATFORM_DEVID_NONE);
-	pdev->num_resources = 0;
-	platform_device_add(pdev);
-
-	master = spi_alloc_master(&pdev->dev, sizeof(void *));
-	if (!master) {
-		ERR("Error: failed to allocate SPI master device");
-		platform_device_unregister(pdev);
-		return NULL;
-	}
-
-	dev = class_find_device(master->dev.class, NULL, &bus_num,
-				__spi_controller_match);
-	if (dev) {
-		ctlr = container_of(dev, struct spi_controller, dev);
-		/* class_find_device takes a reference, release it */
-		put_device(dev);
-	}
-
-	spi_master_put(master);
-	platform_device_unregister(pdev);
-
-	return ctlr;
-}
-#endif
-
-#ifndef CONFIG_SPI_USE_DT
-struct spi_device *nrc_create_spi_device(void)
-{
-	struct spi_master *master;
-	struct spi_device *spi;
-
-	/* Apply module parameters */
-	bi.bus_num = spi_bus_num;
-	bi.chip_select = spi_cs_num;
-	bi.irq = (spi_gpio_irq >= 0 && spi_polling_interval <= 0) ?
-			 gpio_to_irq(spi_gpio_irq) :
-			 -1;
-	bi.max_speed_hz = hifspeed;
-
-	/* Find the spi master that our device is attached to */
-	master = spi_busnum_to_master(spi_bus_num);
-	if (!master) {
-		ERR("Could not find spi master with the bus number %d.",
-		    spi_bus_num);
-		return NULL;
-	}
-
-	/* Instantiate and add a spi device */
-	spi = spi_new_device(master, &bi);
-	if (!spi) {
-		ERR("Failed to instantiate a new spi device.");
-		return NULL;
-	}
-	/*
-	 * The SPI core supports multiple chip selects; this driver uses only
-	 * chip_select index 0.
-	 * However, it appears that the function below may need to be used in the future.
-	 * example) int cs = spi_get_chipselect(spi, 0);
-	 */
-	INFO("SPI Device Created (bus_num:%d, cs_num:%d, irq_num:%d, max_speed:%d",
-	     spi->master->bus_num,
-	     spi->chip_select[0],
-	     spi->irq, spi->max_speed_hz);
-	return spi;
-}
-#endif
 
 int nrc_hif_set_model_conf(struct nrc_hif_device *hdev, u16 chip_id)
 {

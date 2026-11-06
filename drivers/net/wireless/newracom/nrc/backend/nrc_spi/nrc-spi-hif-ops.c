@@ -184,13 +184,8 @@ static int spi_hif_start(struct nrc_hif_device *hdev)
 			goto kill_kthread;
 		}
 	} else if (spi->irq >= 0) {
-#ifdef CONFIG_SPI_USE_DT
 		/* DT provides IRQ trigger configuration */
 		unsigned long irq_flags = IRQF_ONESHOT;
-#else
-		/* Non-DT: specify trigger type explicitly */
-		unsigned long irq_flags = IRQF_TRIGGER_HIGH | IRQF_ONESHOT;
-#endif
 		if (!priv->irq_requested) {
 			ret = request_threaded_irq(spi->irq, NULL, spi_irq,
 						   irq_flags, "nrc-spi-irq",

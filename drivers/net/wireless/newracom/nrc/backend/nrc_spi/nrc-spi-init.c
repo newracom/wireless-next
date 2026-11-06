@@ -35,24 +35,11 @@
 /* External declarations */
 static DECLARE_COMPLETION(spi_probe_done);
 
-#ifndef CONFIG_SPI_USE_DT
-struct spi_device *nrc_create_spi_device(void);
-#endif
-
-#ifndef CONFIG_SPI_USE_DT
-static struct spi_device *g_spi_dev;
-#endif
-
 /* SPI device ID table */
 static const struct spi_device_id nrc_spi_id[] = {{NRC_DRIVER_NAME, 0}, {}};
 MODULE_DEVICE_TABLE(spi, nrc_spi_id);
 
-/*
- * struct nrc_spi_priv::reset_gpio only exists on CONFIG_SPI_USE_DT builds, so
- * every access to it has to be compiled out elsewhere.  Wrap it here once so
- * the reset path below stays free of preprocessor conditionals.
- */
-#if defined(CONFIG_SPI_USE_DT)
+/* DT reset line (reset-gpios), NULL when the device tree names none */
 static inline bool nrc_dt_reset_present(struct nrc_spi_priv *priv)
 {
 	return priv->reset_gpio != NULL;
@@ -62,16 +49,6 @@ static inline void nrc_dt_reset_set(struct nrc_spi_priv *priv, int value)
 {
 	gpiod_set_value_cansleep(priv->reset_gpio, value);
 }
-#else
-static inline bool nrc_dt_reset_present(struct nrc_spi_priv *priv)
-{
-	return false;
-}
-
-static inline void nrc_dt_reset_set(struct nrc_spi_priv *priv, int value)
-{
-}
-#endif
 
 /*
  * Reset the chip once at probe so that it starts ROM boot from a known state.
@@ -273,22 +250,10 @@ static struct spi_driver nrc_cspi_driver = {
  */
 static int __init nrc_cspi_init(void)
 {
-#ifndef CONFIG_SPI_USE_DT
-	struct spi_device *spi;
-#endif
 	int ret = 0;
 
 	/* Initialize SPI parameters */
 	nrc_spi_params_init();
-
-#ifndef CONFIG_SPI_USE_DT
-	spi = nrc_create_spi_device();
-	if (IS_ERR(spi)) {
-		ERR("Failed to nrc_create_spi_dev");
-		goto out;
-	}
-	g_spi_dev = spi;
-#endif
 
 	ret = spi_register_driver(&nrc_cspi_driver);
 	if (ret) {
@@ -322,10 +287,6 @@ static int __init nrc_cspi_init(void)
 	return 0;
 
 unregister_device:
-#ifndef CONFIG_SPI_USE_DT
-	spi_unregister_device(spi);
-out:
-#endif
 	return ret;
 }
 
@@ -334,9 +295,6 @@ out:
  */
 static void __exit nrc_cspi_exit(void)
 {
-#ifndef CONFIG_SPI_USE_DT
-	spi_unregister_device(g_spi_dev);
-#endif
 	spi_unregister_driver(&nrc_cspi_driver);
 }
 
