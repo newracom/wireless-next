@@ -131,9 +131,7 @@ struct spi_status_reg {
 /* Object prepended to strut nrc_hif_device */
 struct nrc_spi_priv {
 	struct spi_device *spi;
-#if defined(CONFIG_SPI_USE_DT)
 	struct gpio_desc *reset_gpio;
-#endif
 	/* Legacy HW reset GPIO from spi_reset_gpio module param, used only when
 	 * DT reset-gpios is absent. -1 when unused (DT path or soft-reset). */
 	int reset_gpio_num;

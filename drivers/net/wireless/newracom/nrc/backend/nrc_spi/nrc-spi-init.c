@@ -13,10 +13,6 @@
 #include <linux/spi/spi.h>
 #include <linux/gpio.h>
 #include <linux/completion.h>
-#if defined(ANDROID) && defined(CONFIG_PM)
-#include <linux/pm_wakeirq.h>
-#include <linux/pm_runtime.h>
-#endif
 
 /* Common directory headers - Core */
 #include "nrc.h"
@@ -39,24 +35,11 @@
 /* External declarations */
 static DECLARE_COMPLETION(spi_probe_done);
 
-#ifndef CONFIG_SPI_USE_DT
-struct spi_device *nrc_create_spi_device(void);
-#endif
-
-#ifndef CONFIG_SPI_USE_DT
-static struct spi_device *g_spi_dev;
-#endif
-
 /* SPI device ID table */
 static const struct spi_device_id nrc_spi_id[] = {{NRC_DRIVER_NAME, 0}, {}};
 MODULE_DEVICE_TABLE(spi, nrc_spi_id);
 
-/*
- * struct nrc_spi_priv::reset_gpio only exists on CONFIG_SPI_USE_DT builds, so
- * every access to it has to be compiled out elsewhere.  Wrap it here once so
- * the reset path below stays free of preprocessor conditionals.
- */
-#if defined(CONFIG_SPI_USE_DT)
+/* DT reset line (reset-gpios), NULL when the device tree names none */
 static inline bool nrc_dt_reset_present(struct nrc_spi_priv *priv)
 {
 	return priv->reset_gpio != NULL;
@@ -66,16 +49,6 @@ static inline void nrc_dt_reset_set(struct nrc_spi_priv *priv, int value)
 {
 	gpiod_set_value_cansleep(priv->reset_gpio, value);
 }
-#else
-static inline bool nrc_dt_reset_present(struct nrc_spi_priv *priv)
-{
-	return false;
-}
-
-static inline void nrc_dt_reset_set(struct nrc_spi_priv *priv, int value)
-{
-}
-#endif
 
 /*
  * Reset the chip once at probe so that it starts ROM boot from a known state.
@@ -143,27 +116,6 @@ static int nrc_cspi_probe(struct spi_device *spi)
 
 	nrc_dbg_init(&spi->dev);
 
-#ifdef ANDROID
-#ifdef CONFIG_PM
-	INFO("[%s,L%d] device_init_wakeup spi->irq:%d", __func__, __LINE__,
-	     spi->irq);
-	device_init_wakeup(&spi->dev, true);
-	dev_pm_set_wake_irq(&spi->dev, spi->irq);
-#ifdef ANDROID_SP01
-	pm_runtime_disable(spi->controller->dev.parent);
-
-#ifdef CONFIG_PM_SLEEP
-	spi_master_suspend(spi->controller);
-	pm_generic_resume(spi->controller->dev.parent);
-#endif
-
-	pm_generic_runtime_resume(spi->controller->dev.parent);
-	spi->controller->auto_runtime_pm = false;
-#endif
-	spi->controller->rt = true;
-#endif
-#endif
-
 	priv = nrc_cspi_alloc(spi);
 	if (IS_ERR(priv)) {
 		ERR("Failed to nrc_cspi_alloc");
@@ -211,12 +163,6 @@ err_cspi_free:
 	nrc_cspi_free(priv);
 
 	spi_set_drvdata(spi, NULL);
-#ifdef ANDROID
-#ifdef CONFIG_PM
-	dev_pm_clear_wake_irq(&spi->dev);
-	device_init_wakeup(&spi->dev, false);
-#endif
-#endif
 	complete(&spi_probe_done);
 	return ret;
 }
@@ -229,12 +175,6 @@ static void nrc_cspi_remove(struct spi_device *spi)
 {
 	struct nrc_spi_priv *priv;
 
-#ifdef ANDROID
-#ifdef CONFIG_PM
-	dev_pm_clear_wake_irq(&spi->dev);
-	device_init_wakeup(&spi->dev, false);
-#endif
-#endif
 	INFO("Remove nrc spi device");
 
 	/* Cleanup SPI debugfs */
@@ -310,22 +250,10 @@ static struct spi_driver nrc_cspi_driver = {
  */
 static int __init nrc_cspi_init(void)
 {
-#ifndef CONFIG_SPI_USE_DT
-	struct spi_device *spi;
-#endif
 	int ret = 0;
 
 	/* Initialize SPI parameters */
 	nrc_spi_params_init();
-
-#ifndef CONFIG_SPI_USE_DT
-	spi = nrc_create_spi_device();
-	if (IS_ERR(spi)) {
-		ERR("Failed to nrc_create_spi_dev");
-		goto out;
-	}
-	g_spi_dev = spi;
-#endif
 
 	ret = spi_register_driver(&nrc_cspi_driver);
 	if (ret) {
@@ -359,10 +287,6 @@ static int __init nrc_cspi_init(void)
 	return 0;
 
 unregister_device:
-#ifndef CONFIG_SPI_USE_DT
-	spi_unregister_device(spi);
-out:
-#endif
 	return ret;
 }
 
@@ -371,9 +295,6 @@ out:
  */
 static void __exit nrc_cspi_exit(void)
 {
-#ifndef CONFIG_SPI_USE_DT
-	spi_unregister_device(g_spi_dev);
-#endif
 	spi_unregister_driver(&nrc_cspi_driver);
 }
 
