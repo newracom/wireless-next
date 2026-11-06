@@ -14,9 +14,6 @@
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/pm.h>
-#if defined(ANDROID) && defined(CONFIG_PM_SLEEP)
-#include <linux/pm_wakeup.h>
-#endif
 #include <linux/types.h>
 
 #include "nrc.h"
@@ -239,19 +236,6 @@ int nrc_ps_handle_event(struct nrc_hif_device *hdev,
 		       nrc_ps_state_str(old_state), nrc_ps_state_str(new_state),
 		       nrc_ps_mode_str(event_data->mode),
 		       nrc_ps_reason_str(event_data->reason));
-
-#if defined(ANDROID) && defined(CONFIG_PM_SLEEP)
-		/* Android PM control on state transitions */
-		if (new_state == NRC_PS_STATE_SLEEP && hdev->dev) {
-			VBS_PS("pm_relax: entering sleep");
-			pm_relax(hdev->dev);
-		} else if ((new_state == NRC_PS_STATE_WAKE ||
-			    new_state == NRC_PS_STATE_WAKING) &&
-			   old_state == NRC_PS_STATE_SLEEP && hdev->dev) {
-			VBS_PS("pm_stay_awake: waking up");
-			pm_stay_awake(hdev->dev);
-		}
-#endif
 	}
 
 	spin_unlock_irqrestore(&hdev->ps.lock, flags);
