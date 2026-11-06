@@ -13,10 +13,6 @@
 #include <linux/spi/spi.h>
 #include <linux/gpio.h>
 #include <linux/completion.h>
-#if defined(ANDROID) && defined(CONFIG_PM)
-#include <linux/pm_wakeirq.h>
-#include <linux/pm_runtime.h>
-#endif
 
 /* Common directory headers - Core */
 #include "nrc.h"
@@ -143,27 +139,6 @@ static int nrc_cspi_probe(struct spi_device *spi)
 
 	nrc_dbg_init(&spi->dev);
 
-#ifdef ANDROID
-#ifdef CONFIG_PM
-	INFO("[%s,L%d] device_init_wakeup spi->irq:%d", __func__, __LINE__,
-	     spi->irq);
-	device_init_wakeup(&spi->dev, true);
-	dev_pm_set_wake_irq(&spi->dev, spi->irq);
-#ifdef ANDROID_SP01
-	pm_runtime_disable(spi->controller->dev.parent);
-
-#ifdef CONFIG_PM_SLEEP
-	spi_master_suspend(spi->controller);
-	pm_generic_resume(spi->controller->dev.parent);
-#endif
-
-	pm_generic_runtime_resume(spi->controller->dev.parent);
-	spi->controller->auto_runtime_pm = false;
-#endif
-	spi->controller->rt = true;
-#endif
-#endif
-
 	priv = nrc_cspi_alloc(spi);
 	if (IS_ERR(priv)) {
 		ERR("Failed to nrc_cspi_alloc");
@@ -211,12 +186,6 @@ err_cspi_free:
 	nrc_cspi_free(priv);
 
 	spi_set_drvdata(spi, NULL);
-#ifdef ANDROID
-#ifdef CONFIG_PM
-	dev_pm_clear_wake_irq(&spi->dev);
-	device_init_wakeup(&spi->dev, false);
-#endif
-#endif
 	complete(&spi_probe_done);
 	return ret;
 }
@@ -229,12 +198,6 @@ static void nrc_cspi_remove(struct spi_device *spi)
 {
 	struct nrc_spi_priv *priv;
 
-#ifdef ANDROID
-#ifdef CONFIG_PM
-	dev_pm_clear_wake_irq(&spi->dev);
-	device_init_wakeup(&spi->dev, false);
-#endif
-#endif
 	INFO("Remove nrc spi device");
 
 	/* Cleanup SPI debugfs */

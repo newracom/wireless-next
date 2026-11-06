@@ -1448,7 +1448,6 @@ DEVICE_READY:
 			/* A_ENABLE includes S_ENABLE bit — sync throttle flag */
 			priv->data_irq_disabled = true;
 			/* FW entered PS - keep fw.state as ACTIVE (FW still running) */
-			/* Note: Android PM (pm_relax) is handled in core module PS state machine */
 			DBG_PS("Wake-up by FW_ENTER_TO_PS");
 			break;
 		}
